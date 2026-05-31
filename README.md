@@ -1,17 +1,19 @@
-# Run and deploy your AI Studio app
+# FigType
 
-![GHBanner](https://ai.google.dev/static/site-assets/images/share-ais-513315318.png)
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: [AI Studio app](https://ai.studio/apps/23b7f264-e1b7-428c-a279-bf89e0d37cdf)
+FigType is a local typing practice platform with training exercises, real-time contests, certificates, and progress tracking.
 
 ## Run Locally
 
 1. Install dependencies:
-**Prerequisites:**  Node.js
-1. Install dependencies:
    `npm install`
-1. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-1. Run the app:
+2. Start the app:
    `npm run dev`
+3. Open the app in your browser at:
+   `http://localhost:3000`
+
+## Build for Production
+
+1. Build the client and server bundles:
+   `npm run build`
+2. Start the production server:
+   `npm start`

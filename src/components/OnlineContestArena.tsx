@@ -690,7 +690,7 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
               Multiplayer Typing Contests Arena
             </h2>
             <p className="text-slate-400 text-xs md:text-sm max-w-xl leading-relaxed">
-              Create invite codes, register for global championships, or challenge live cognitive AI bots. High speed and precision win global coin stakes!
+              Create invite codes, register for global championships, or challenge live rivals in real-time. High speed and precision win global coin stakes!
             </p>
           </div>
 

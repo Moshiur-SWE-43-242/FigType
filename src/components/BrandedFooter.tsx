@@ -32,7 +32,7 @@ export default function BrandedFooter({ onSelectTab }: Props) {
             <span className="text-[9px] uppercase px-1.5 py-0.5 bg-[#00F3FF]/10 text-[#00F3FF] rounded">v1.0.0</span>
           </div>
           <p className="text-slate-500 leading-relaxed text-[11px] font-sans">
-            The world's premier neural typing arena. Developed with cryptographic motor safety, gamified progression systems, and live AI diagnostics in Daffodil SWE Group.
+            The world's premier typing arena. Developed with cryptographic motor safety, gamified progression systems, and advanced coaching analytics in Daffodil SWE Group.
           </p>
           <div className="text-[11px] font-sans text-slate-500">
             Powered by <strong className="text-slate-300">MiraCore Logix</strong><br />
@@ -52,7 +52,7 @@ export default function BrandedFooter({ onSelectTab }: Props) {
             <li><span onClick={() => handleHubClick('PRACTICE')} className="hover:text-[#00F3FF] cursor-pointer transition">Practice Core Arena</span></li>
             <li><span onClick={() => handleHubClick('MULTIPLAYER')} className="hover:text-[#00F3FF] cursor-pointer transition">Multiplayer Lobby</span></li>
             <li><span onClick={() => handleHubClick('REWARDS')} className="hover:text-[#00F3FF] cursor-pointer transition">Training Certification</span></li>
-            <li><span onClick={() => handleHubClick('COACH')} className="hover:text-[#00F3FF] cursor-pointer transition">Neural AI Diagnostics</span></li>
+            <li><span onClick={() => handleHubClick('COACH')} className="hover:text-[#00F3FF] cursor-pointer transition">Personal Coach Insights</span></li>
           </ul>
         </div>
 

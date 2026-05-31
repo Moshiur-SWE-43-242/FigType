@@ -196,10 +196,10 @@ export default function App() {
                 The World's Premier Neural Typing Arena
               </span>
               <h1 className="text-3xl md:text-5xl font-display font-extrabold tracking-tight text-white leading-tight">
-                Train Kinetic Muscle Memory with <span className="text-[#00F3FF]">AI coaching</span>
+                Train Kinetic Muscle Memory with premium typing coaching
               </h1>
               <p className="text-slate-400 text-sm md:text-base leading-relaxed">
-                Unlock high-performance coding speeds under monitored biometric feedback. Created by software engineers at Daffodil University, powered by MiraCore Logix.
+                Unlock high-performance coding speeds under monitored practice workflows. Created by software engineers at Daffodil University, powered by MiraCore Logix.
               </p>
 
               <div className="grid grid-cols-2 gap-4 font-mono text-[11px] text-slate-500 border-t border-slate-900 pt-6">
@@ -305,7 +305,7 @@ export default function App() {
                 onClick={() => setActiveTab('COACH')}
                 className={`px-2 py-1 rounded-lg text-[11px] font-mono font-medium transition cursor-pointer flex items-center gap-1 ${activeTab === 'COACH' ? 'bg-[#00F3FF]/15 text-[#00F3FF] font-bold border-b-2 border-[#00F3FF]' : 'text-slate-400 hover:text-slate-200'}`}
               >
-                <Bot className="w-3.5 h-3.5" /> AI diagnostics
+                <Bot className="w-3.5 h-3.5" /> Coach
               </button>
               <button
                 onClick={() => setActiveTab('REWARDS')}
@@ -416,7 +416,7 @@ export default function App() {
               onClick={() => { setActiveTab('COACH'); setIsMobileMenuOpen(false); }}
               className={`w-full py-2.5 text-left px-2 rounded-lg flex items-center gap-2 ${activeTab === 'COACH' ? 'bg-[#00F3FF]/10 text-[#00F3FF]' : 'text-slate-400'}`}
             >
-              <Bot className="w-4 h-4" /> AI Diagnostics
+              <Bot className="w-4 h-4" /> Coach
             </button>
             <button
               onClick={() => { setActiveTab('REWARDS'); setIsMobileMenuOpen(false); }}

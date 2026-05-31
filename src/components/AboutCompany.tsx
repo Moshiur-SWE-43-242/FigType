@@ -142,7 +142,7 @@ export default function AboutCompany({ websiteLogo, founderPicture, mSquareLogo,
             As a dedicated Software Engineering student at **Daffodil International University**, Md Moshiur Rahaman Riat recognized a severe technological disparity. Typing platforms routinely treated kinetic mechanics as simple casual games, completely neglecting the complex neural pipelines, cognitive muscle memory, and professional certification needs of developers and clerical officers.
           </p>
           <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
-            Under the financial patronage of **MiraCore Logix**, Riat designed the core <strong>FigType</strong> multi-layered engine. The concept blends low-latency gaming infrastructure, real-time multiplayer lobbies, structured steno chord lessons, and deep generative AI feedback. We are transforming simple typing exercises into high-performance training regimens.
+            Under the financial patronage of **MiraCore Logix**, Riat designed the core <strong>FigType</strong> multi-layered engine. The concept blends low-latency gaming infrastructure, real-time multiplayer lobbies, structured steno chord lessons, and intelligent training feedback. We are transforming simple typing exercises into high-performance training regimens.
           </p>
         </div>
 
