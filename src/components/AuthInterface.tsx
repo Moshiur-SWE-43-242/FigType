@@ -185,7 +185,7 @@ export default function AuthInterface({ onAuthenticated, websiteLogo }: Props) {
         {websiteLogo ? (
           <img 
             src={websiteLogo} 
-            alt="FigTyp Brand Logo" 
+            alt="FigType Brand Logo" 
             className="mx-auto max-h-16 max-w-[200px] object-contain rounded-xl border border-slate-800 p-2 bg-slate-950/40 neon-shadow-blue"
             referrerPolicy="no-referrer"
           />
@@ -195,7 +195,7 @@ export default function AuthInterface({ onAuthenticated, websiteLogo }: Props) {
           </div>
         )}
         <h2 className="text-2xl font-semibold text-white tracking-tight font-display">
-          Welcome to <span className="text-[#00F3FF]">FigTyp</span>
+          Welcome to <span className="text-[#00F3FF]">FigType</span>
         </h2>
         <p className="text-slate-400 text-xs font-sans">
           Authentication Gateway &bull; Powered by MiraCore Logix
@@ -406,7 +406,7 @@ export default function AuthInterface({ onAuthenticated, websiteLogo }: Props) {
             // Provide arbitrary temporary user credentials for guest preview
             onAuthenticated({
               id: 'guest-' + Math.random().toString(36).substr(2, 5),
-              email: 'guest@figtyp.ai',
+              email: 'guest@figtype.ai',
               username: `Guest_${Math.floor(1000 + Math.random() * 9000)}`,
               fullName: 'Guest Observer',
               role: 'GUEST',
