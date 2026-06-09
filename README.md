@@ -1,6 +1,6 @@
-# FigType
+# FigTyp
 
-FigType is a local typing practice platform with training exercises, real-time contests, certificates, and progress tracking.
+FigTyp is a local typing practice platform with training exercises, real-time contests, certificates, and progress tracking.
 
 ## Run Locally
 

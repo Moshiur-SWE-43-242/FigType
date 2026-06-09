@@ -173,7 +173,7 @@ const DEFAULT_COURSES: Course[] = [
       { id: 'l11-2', title: 'Right Shift Priming', text: 'Alice Bob Charlie Frank Grace Helen Victor Wendy Xavier Ziyi', instructions: 'Use left hand letters while depressing the right Shift keys.', xpReward: 70, coinsReward: 30 },
       { id: 'l11-3', title: 'Proper Global Entities', text: 'Bangladesh Dhaka Asia Europe America Canada Japan Germany India', instructions: 'Practice complex geographic proper noun names rapidly.', xpReward: 75, coinsReward: 32 },
       { id: 'l11-4', title: 'Acronym Declarations', text: 'VITE REACT HTML CSS JSON REST API GRAPHQL YAML WPM CPM XP', instructions: 'Maintain uppercase flows with alternating hands.', xpReward: 80, coinsReward: 35 },
-      { id: 'l11-5', title: 'Proper Sentential Streams', text: 'Mr. Moshiur Rahaman Riat founded the FigType Esports Arena in 2026.', instructions: 'Integrate shifts, numbers, and common symbols gracefully.', xpReward: 90, coinsReward: 42 }
+      { id: 'l11-5', title: 'Proper Sentential Streams', text: 'Mr. Moshiur Rahaman Riat founded the FigTyp Esports Arena in 2026.', instructions: 'Integrate shifts, numbers, and common symbols gracefully.', xpReward: 90, coinsReward: 42 }
     ]
   },
   {
@@ -269,7 +269,7 @@ const DEFAULT_COURSES: Course[] = [
     lessons: [
       { id: 'l18-1', title: 'Basic Div Wrappings', text: '<div id="profile-card" className="p-4 bg-slate-900 border">', instructions: 'Reach less-than and greater-than tags under relaxed touch control.', xpReward: 80, coinsReward: 35 },
       { id: 'l18-2', title: 'Heading Structure hierarchy', text: '<h1 className="text-xl font-display font-medium text-white"></h1>', instructions: 'Practice heading tags and long className attributes.', xpReward: 80, coinsReward: 35 },
-      { id: 'l18-3', title: 'Hypermedia Links', text: '<a href="https://figtype.ai" target="_blank" rel="noopener"></a>', instructions: 'Integrate string addresses and protocols.', xpReward: 85, coinsReward: 38 },
+      { id: 'l18-3', title: 'Hypermedia Links', text: '<a href="https://figtyp.ai" target="_blank" rel="noopener"></a>', instructions: 'Integrate string addresses and protocols.', xpReward: 85, coinsReward: 38 },
       { id: 'l18-4', title: 'Unordered Lists', text: '<ul><li className="text-xs">First Module</li></ul>', instructions: 'Type double tags under continuous hand pressure.', xpReward: 90, coinsReward: 40 },
       { id: 'l18-5', title: 'Component Closures', text: '</main><BrandedFooter onSelectTab={setActiveTab} />', instructions: 'Input combined custom component declarations without checking the keyboard.', xpReward: 95, coinsReward: 42 }
     ]
@@ -305,7 +305,7 @@ const DEFAULT_COURSES: Course[] = [
   {
     id: 'course-21',
     title: 'Neural System Concepts',
-    description: 'Test your typing coordination on advanced conceptual descriptions of FigType.',
+    description: 'Test your typing coordination on advanced conceptual descriptions of FigTyp.',
     difficulty: 'Expert',
     category: 'Steno Shorthand',
     lessons: [
@@ -354,8 +354,8 @@ const DEFAULT_CONTESTS: Contest[] = [
 const DEFAULT_NOTICES: CMSNotice[] = [
   {
     id: 'notice-1',
-    title: 'Welcome to FigType Neural Arena!',
-    content: 'FigType v1.0.0 is officially live! Experience the absolute peak of adaptive cloud typing, steno lessons, multiplayer speed matches, and customized AI evaluations.',
+    title: 'Welcome to FigTyp Neural Arena!',
+    content: 'FigTyp v1.0.0 is officially live! Experience the absolute peak of adaptive cloud typing, steno lessons, multiplayer speed matches, and customized AI evaluations.',
     active: true,
     createdAt: new Date().toISOString()
   },
@@ -496,8 +496,8 @@ function loadDB(): DBStructure {
         accuracy: 98.1,
         mode: 'Championship Speedrun',
         issueDate: new Date().toISOString(),
-        verificationUrl: 'https://figtype.ai/certs/verify/cert-001',
-        qrCodeData: 'FIGTYPE-VERIFY:cert-001:92WPM:98.1%',
+        verificationUrl: 'https://figtyp.ai/certs/verify/cert-001',
+        qrCodeData: 'FIGTYP-VERIFY:cert-001:92WPM:98.1%',
         signature: 'Md Moshiur Rahaman Riat'
       }
     ],

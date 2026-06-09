@@ -65,7 +65,7 @@ export default function AICoachPanel({ userToken, recentAttempts }: Props) {
     const focusMantra = 'Small consistent gains produce the strongest typing foundation.';
 
     setReport(
-      `### FigType Local Coach Report\n\n` +
+      `### FigTyp Local Coach Report\n\n` +
       `**Mode:** ${testMode}  \\n` +
       `**Average WPM:** ${averageWpm}  \\n` +
       `**Average Accuracy:** ${averageAccuracy}%  \\n` +
@@ -91,7 +91,7 @@ export default function AICoachPanel({ userToken, recentAttempts }: Props) {
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#8B5CF6]/10 rounded-full blur-2xl pointer-events-none" />
         <div className="space-y-3 md:w-2/3">
           <span className="text-[10px] font-mono tracking-widest text-[#8B5CF6] uppercase px-2.5 py-1 bg-[#8B5CF6]/10 rounded-full">
-            FigType Local Coach
+            FigTyp Local Coach
           </span>
           <h2 className="text-2xl font-display font-medium text-white flex items-center gap-2">
             Practical typing guidance from your recent results
@@ -192,7 +192,7 @@ export default function AICoachPanel({ userToken, recentAttempts }: Props) {
           {report && !loading && (
             <div className="mt-6 pt-4 border-t border-slate-900 flex items-center justify-between text-[11px] text-slate-500 font-mono">
               <span>Report generated locally</span>
-              <span>Source: FigType Coach</span>
+              <span>Source: FigTyp Coach</span>
             </div>
           )}
         </div>

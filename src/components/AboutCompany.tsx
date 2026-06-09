@@ -142,7 +142,7 @@ export default function AboutCompany({ websiteLogo, founderPicture, mSquareLogo,
             As a dedicated Software Engineering student at **Daffodil International University**, Md Moshiur Rahaman Riat recognized a severe technological disparity. Typing platforms routinely treated kinetic mechanics as simple casual games, completely neglecting the complex neural pipelines, cognitive muscle memory, and professional certification needs of developers and clerical officers.
           </p>
           <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
-            Under the financial patronage of **MiraCore Logix**, Riat designed the core <strong>FigType</strong> multi-layered engine. The concept blends low-latency gaming infrastructure, real-time multiplayer lobbies, structured steno chord lessons, and intelligent training feedback. We are transforming simple typing exercises into high-performance training regimens.
+            Under the financial patronage of **MiraCore Logix**, Riat designed the core <strong>FigTyp</strong> multi-layered engine. The concept blends low-latency gaming infrastructure, real-time multiplayer lobbies, structured steno chord lessons, and intelligent training feedback. We are transforming simple typing exercises into high-performance training regimens.
           </p>
         </div>
 
@@ -162,12 +162,12 @@ export default function AboutCompany({ websiteLogo, founderPicture, mSquareLogo,
               <span className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-[#8B5CF6] ring-4 ring-[#8B5CF6]/10" />
               <div className="font-mono text-[#8B5CF6] font-semibold">2025 Q4</div>
               <div className="font-semibold text-white">Daffodil SWE Alliance</div>
-              <div className="text-slate-500">Moshiur Riat commences prototyping the FigType modular design spec.</div>
+              <div className="text-slate-500">Moshiur Riat commences prototyping the FigTyp modular design spec.</div>
             </div>
             <div className="relative">
               <span className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-[#00FF95] ring-4 ring-[#00FF95]/10" />
               <div className="font-mono text-[#00FF95] font-semibold">2026</div>
-              <div className="font-semibold text-white">FigType Arena Launched</div>
+              <div className="font-semibold text-white">FigTyp Arena Launched</div>
               <div className="text-slate-500">Officially entered commercial status offering global neural typist arenas.</div>
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function AboutCompany({ websiteLogo, founderPicture, mSquareLogo,
 
           {submitted && (
             <p className="text-[#00FF95] text-xs font-mono text-center animate-pulse">
-              ✓ Telemetry successfully filed! Thank you for backing FigType development.
+              ✓ Telemetry successfully filed! Thank you for backing FigTyp development.
             </p>
           )}
         </form>

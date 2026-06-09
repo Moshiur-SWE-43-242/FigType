@@ -28,7 +28,7 @@ export default function BrandedFooter({ onSelectTab }: Props) {
         {/* Branding Attribution Block */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold font-display tracking-wider text-white">FIG<span className="text-[#00F3FF]">TYPE</span></span>
+            <span className="text-sm font-semibold font-display tracking-wider text-white">FIG<span className="text-[#00F3FF]">TYP</span></span>
             <span className="text-[9px] uppercase px-1.5 py-0.5 bg-[#00F3FF]/10 text-[#00F3FF] rounded">v1.0.0</span>
           </div>
           <p className="text-slate-500 leading-relaxed text-[11px] font-sans">
@@ -122,7 +122,7 @@ export default function BrandedFooter({ onSelectTab }: Props) {
       <div id="footer-bottom" className="max-w-7xl mx-auto mt-12 pt-6 border-t border-slate-950 flex flex-col md:flex-row items-center justify-between text-slate-600 text-[11px] font-sans">
         
         <div className="flex flex-wrap items-center gap-4">
-          <span>&copy; 2026 FigType. Own copyrights of MiraCore Logix & M-Square Devs Group.</span>
+          <span>&copy; 2026 FigTyp. Own copyrights of MiraCore Logix & M-Square Devs Group.</span>
           <span className="hidden md:inline text-slate-800">|</span>
           <span className="flex items-center gap-1"><Shield className="w-3.5 h-3.5" /> All System Logs Verifiable</span>
         </div>

@@ -16,12 +16,17 @@ export interface User {
   themePreference?: string;
   avatarUrl?: string;
   badges?: string[];
+  phoneNumber?: string;
+  socialLink?: string;
+  institute?: string;
+  professionalRole?: string;
+  emailVerified?: boolean;
 }
 
 export interface TypingAttempt {
   id: string;
   userId?: string;
-  mode: 'time' | 'words' | 'quote' | 'code';
+  mode: 'time' | 'words' | 'quote' | 'code' | 'course';
   duration: number; // in seconds
   wordCount: number;
   wpm: number;

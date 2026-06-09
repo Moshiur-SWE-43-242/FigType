@@ -192,7 +192,7 @@ export default function CourseTraining({ userToken, onCoinsAwarded }: Props) {
       doc.rect(qrx + 2, qry + qrSize - 4, 2, 2, 'F');
 
       // Verification String with all relevant details
-      const verificationText = `FIGTYPE COURSE CERTIFICATE | Name: ${studentName} | Course: ${course.title} | Category: ${course.category} | Hash: ACAD-REG-${course.id}-${Math.floor(100000 + Math.random() * 900000)} | Authority: MiraCore Registrar`;
+      const verificationText = `FIGTYP COURSE CERTIFICATE | Name: ${studentName} | Course: ${course.title} | Category: ${course.category} | Hash: ACAD-REG-${course.id}-${Math.floor(100000 + Math.random() * 900000)} | Authority: MiraCore Registrar`;
 
       // Programmatic matrix of random but deterministic dots for an authentic look based on the verification text
       let hash = 0;
@@ -347,6 +347,26 @@ export default function CourseTraining({ userToken, onCoinsAwarded }: Props) {
     setAccuracyCalculated(100);
   };
 
+  const getCoursesGroupedByDifficulty = () => {
+    const difficultyOrder: Record<string, number> = { 'Beginner': 0, 'Intermediate': 1, 'Advanced': 2 };
+    return courses.sort((a, b) => {
+      const orderA = difficultyOrder[a.difficulty] ?? 999;
+      const orderB = difficultyOrder[b.difficulty] ?? 999;
+      return orderA - orderB;
+    });
+  };
+
+  const getProgressPercentage = (course: Course) => {
+    const total = course.lessons.length;
+    const completed = course.lessons.filter(l => completedLessonsList.includes(l.id)).length;
+    return total > 0 ? Math.round((completed / total) * 100) : 0;
+  };
+
+  const getProgressBarClass = (percent: number) => {
+    const normalized = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
+    return `prog-width-${normalized}`;
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!activeLesson) return;
     const value = e.target.value;
@@ -420,7 +440,7 @@ export default function CourseTraining({ userToken, onCoinsAwarded }: Props) {
             Cognitive Typing Academics Core
           </span>
           <h2 className="text-2xl font-display font-medium text-white flex items-center gap-2">
-            FigType Structured Courses Center
+            FigTyp Structured Courses Center
           </h2>
           <p className="text-slate-400 text-xs md:text-sm max-w-2xl leading-relaxed">
             Level up from simple letter-striking into complex operators, database briefs, and stenographic multi-key chords. Acquire global experience multipliers by completing modules!
@@ -478,7 +498,8 @@ export default function CourseTraining({ userToken, onCoinsAwarded }: Props) {
           </h3>
 
           <div className="space-y-3">
-            {courses.map((course) => {
+            {getCoursesGroupedByDifficulty().map((course) => {
+              const progressPercent = getProgressPercentage(course);
               const completedCountInThisCourse = course.lessons.filter(l => completedLessonsList.includes(l.id)).length;
               return (
                 <div
@@ -486,19 +507,26 @@ export default function CourseTraining({ userToken, onCoinsAwarded }: Props) {
                   onClick={() => { setSelectedCourse(course); setActiveLesson(null); }}
                   className={`p-4 rounded-xl border cursor-pointer transition ${selectedCourse?.id === course.id ? 'border-[#00F3FF] bg-[#00F3FF]/5' : 'border-slate-800 bg-slate-950/20 hover:border-slate-700'}`}
                 >
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-mono px-2 py-0.5 bg-slate-900 rounded text-slate-400">{course.category}</span>
-                    <span className="text-[10px] text-slate-500">{course.difficulty}</span>
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${course.difficulty === 'Beginner' ? 'bg-emerald-900/40 text-emerald-300' : course.difficulty === 'Intermediate' ? 'bg-amber-900/40 text-amber-300' : 'bg-rose-900/40 text-rose-300'}`}>
+                      {course.difficulty}
+                    </span>
                   </div>
                   <h4 className="text-xs font-semibold text-white tracking-wide">{course.title}</h4>
                   <p className="text-[11px] text-slate-500 line-clamp-2 mt-1 leading-normal font-sans">{course.description}</p>
                   
-                  {completedCountInThisCourse > 0 && (
-                    <div className="flex items-center gap-1 text-[10px] text-[#00FF95] mt-2 font-mono">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{completedCountInThisCourse} / {course.lessons.length} Completed</span>
+                  <div className="mt-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-[10px] font-mono">
+                      <span className="text-slate-500">{completedCountInThisCourse} / {course.lessons.length}</span>
+                      <span className={progressPercent === 100 ? 'text-[#00FF95]' : 'text-slate-400'}>{progressPercent}%</span>
                     </div>
-                  )}
+                    <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-850">
+                      <div
+                        className={`h-full transition-all duration-300 rounded-full ${getProgressBarClass(progressPercent)} ${progressPercent === 100 ? 'bg-[#00FF95]' : course.difficulty === 'Beginner' ? 'bg-emerald-500' : course.difficulty === 'Intermediate' ? 'bg-amber-500' : 'bg-rose-500'}`}
+                      />
+                    </div>
+                  </div>
                 </div>
               );
             })}

@@ -29,7 +29,7 @@ async function startServer() {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Log server start time and bootstrap notices
-  console.log('Bootstrapping FigType Neural Engine. Systems active.');
+  console.log('Bootstrapping FigTyp Neural Engine. Systems active.');
 
   // Global simple auth middleware based on headers for simulated token verification
   // Allows unauthenticated access as 'GUEST'
@@ -52,7 +52,7 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'active',
-      ecosystem: 'FigType',
+      ecosystem: 'FigTyp',
       owner: 'MiraCore Logix / M-Square Devs Group',
       developer: 'Md Moshiur Rahaman Riat',
       time: new Date().toISOString()
@@ -71,7 +71,7 @@ async function startServer() {
     console.log(`\n======================================================`);
     console.log(`[SECURE SMS/EMAIL TELEMETRY INTEGRATION]`);
     console.log(`OTP generated for: ${email}`);
-    console.log(`Your FigType 6-character access OTP: ${otp}`);
+    console.log(`Your FigTyp 6-character access OTP: ${otp}`);
     console.log(`======================================================\n`);
 
     // In a real database we would bcrypt it, let's keep a simple list
@@ -470,8 +470,8 @@ async function startServer() {
       accuracy: Number(accuracy),
       mode: challengeMode || 'Neural Speed Challenge',
       issueDate: new Date().toLocaleString(),
-      verificationUrl: `https://figtype.ai/certs/verify/${certId}`,
-      qrCodeData: `FIGTYPE-AUTH_VERIFIED:${certId}:${req.user.fullName}:${wpm}-WPM`,
+      verificationUrl: `https://figtyp.ai/certs/verify/${certId}`,
+      qrCodeData: `FIGTYP-AUTH_VERIFIED:${certId}:${req.user.fullName}:${wpm}-WPM`,
       signature: 'Md Moshiur Rahaman Riat, DIU Software Engineer Student'
     };
 
@@ -960,7 +960,7 @@ async function startServer() {
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`\n------------------------------------------------------`);
-    console.log(`  FigType Core Node - ON Port ${PORT}`);
+    console.log(`  FigTyp Core Node - ON Port ${PORT}`);
     console.log(`  Systems live at http://localhost:${PORT}`);
     console.log(`  Owner: MiraCore Logix`);
     console.log(`  Director: Md Moshiur Rahaman Riat`);

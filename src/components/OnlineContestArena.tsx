@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Trophy, Users, Zap, Loader2, PlayCircle, ShieldAlert, Flag, Award, RefreshCw } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { Contest, ContestAttempt } from '../types';
+import { Contest, ContestAttempt, TypingAttempt, User } from '../types';
 import { jsPDF } from 'jspdf';
 
 interface Props {
   userToken: string;
   username: string;
+  currentUser: User;
+  recentAttempts: TypingAttempt[];
   onCoinsAwarded: (coins: number, xp: number) => void;
 }
 
@@ -38,11 +40,12 @@ interface Opponent {
   backspaces?: number;
 }
 
-export default function OnlineContestArena({ userToken, username, onCoinsAwarded }: Props) {
+export default function OnlineContestArena({ userToken, username, currentUser, recentAttempts, onCoinsAwarded }: Props) {
   const [contests, setContests] = useState<Contest[]>([]);
   const [activeContest, setActiveContest] = useState<Contest | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const [heartbeat, setHeartbeat] = useState(0);
   const [activeAttempt, setActiveAttempt] = useState<ContestAttempt | null>(null);
   const [joinCode, setJoinCode] = useState('');
 
@@ -76,6 +79,14 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
 
   const joinByCode = async (code: string) => {
     if (!code.trim()) return;
+    if (!profileReady) {
+      setStatusMsg('Complete your profile details before joining a contest: phone, institute, social link, and role.');
+      return;
+    }
+    if (!eligibleForContest) {
+      setStatusMsg('Complete 15 practice sessions or 5 course practice runs to unlock contests.');
+      return;
+    }
     setLoading(true);
     setStatusMsg('');
     try {
@@ -146,11 +157,27 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeContest) return;
+    if (heartbeat !== null) {
+      const timer = setInterval(() => {
+        setHeartbeat((prev) => prev + 1);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [activeContest, heartbeat]);
+
   const clearAllTimers = () => {
     if (countdownInterval.current) clearInterval(countdownInterval.current);
     if (durationInterval.current) clearInterval(durationInterval.current);
     if (botInterval.current) clearInterval(botInterval.current);
   };
+
+  const contestPracticeSessions = recentAttempts.filter((attempt) => attempt.mode === 'quote' || attempt.mode === 'time' || attempt.mode === 'words').length;
+  const contestCourseSessions = recentAttempts.filter((attempt) => attempt.mode === 'course').length;
+  const eligibleForContest = contestPracticeSessions >= 15 || contestCourseSessions >= 5;
+  const profileReady = Boolean(currentUser.fullName && currentUser.phoneNumber && currentUser.socialLink && currentUser.institute && currentUser.professionalRole);
+  const contestUnlockProgress = Math.min(100, Math.round(((Math.min(contestPracticeSessions / 15, 1) + Math.min(contestCourseSessions / 5, 1)) / 2) * 100));
 
   const fetchContestsList = async () => {
     setLoading(true);
@@ -169,6 +196,14 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
   };
 
   const joinContestRoom = async (contest: Contest) => {
+    if (!profileReady) {
+      setStatusMsg('Complete your profile details before joining a contest: phone, institute, social link, and role.');
+      return;
+    }
+    if (!eligibleForContest) {
+      setStatusMsg('Complete 15 practice sessions or 5 course practice runs to unlock contests.');
+      return;
+    }
     setLoading(true);
     setStatusMsg('');
     try {
@@ -246,6 +281,7 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
 
     // Initialize real-time Socket.IO synchronization channel
     socketRef.current = io();
+    setHeartbeat((value) => value + 1);
     socketRef.current.emit('join-contest', { contestId: activeContest!.id, username: username || 'Racer' });
 
     // Listen to live player status changes from other connected competitors
@@ -509,7 +545,7 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
       doc.rect(qrx + 2, qry + qrSize - 4, 2, 2, 'F');
 
       // Verification String with all relevant details
-      const verificationText = `FIGTYPE CONTEST CHAMPION | Name: ${username} | Contest: ${activeContest?.title || 'Practice Match'} | Speed: ${myWpm} WPM | Accuracy: ${myAccuracy}% | Hash: CT-MATCH-${activeContest?.id || 'PRACTICE'}-${Math.floor(100000 + Math.random() * 900000)} | Marshal: MiraCore Marshal`;
+      const verificationText = `FIGTYP CONTEST CHAMPION | Name: ${username} | Contest: ${activeContest?.title || 'Practice Match'} | Speed: ${myWpm} WPM | Accuracy: ${myAccuracy}% | Hash: CT-MATCH-${activeContest?.id || 'PRACTICE'}-${Math.floor(100000 + Math.random() * 900000)} | Marshal: MiraCore Marshal`;
 
       // Programmatic matrix of random but deterministic dots for an authentic look based on the verification text
       let hash = 0;
@@ -726,6 +762,11 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
               <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
                 Enter a private match invitation code to join secure corporate or private arenas directly.
               </p>
+              <p className="text-[10px] text-slate-500 font-mono">
+                {profileReady ? (
+                  eligibleForContest ? 'You are eligible to join contests.' : 'Complete 15 practice sessions or 5 course practice runs to unlock contests.'
+                ) : 'Complete your profile before joining contests: phone, institute, social link, and role.'}
+              </p>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
               <input
@@ -738,7 +779,8 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
               />
               <button
                 onClick={() => joinByCode(joinCode)}
-                className="px-3 py-2 bg-[#00F3FF] hover:bg-cyan-400 text-slate-950 font-mono text-[10px] font-bold rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shrink-0"
+                disabled={!profileReady || !eligibleForContest}
+                className="px-3 py-2 bg-[#00F3FF] hover:bg-cyan-400 text-slate-950 font-mono text-[10px] font-bold rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Join Arena
               </button>
@@ -773,7 +815,8 @@ export default function OnlineContestArena({ userToken, username, onCoinsAwarded
                   <span>Length: {cnt.duration < 60 ? `${cnt.duration}s` : `${Math.round(cnt.duration / 60)}m`}</span>
                   <button 
                     onClick={() => joinContestRoom(cnt)}
-                    className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded cursor-pointer transition flex items-center gap-1"
+                    disabled={!profileReady || !eligibleForContest}
+                    className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded cursor-pointer transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Enter Room <Users className="w-3.5 h-3.5" />
                   </button>

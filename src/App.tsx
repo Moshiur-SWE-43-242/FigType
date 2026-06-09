@@ -121,22 +121,22 @@ export default function App() {
     if (!user) return;
     setUser((prevUser) => {
       if (!prevUser) return null;
-      const totalXp = prevUser.xp + xpBonus;
-      // Simple formula: each level takes (currentLevel * 150) XP
-      const nextLevelThreshold = prevUser.level * 150;
-      let nextLevel = prevUser.level;
+      let totalXp = prevUser.xp + xpBonus;
+      let currentLevel = prevUser.level;
       let remainingXp = totalXp;
+      let nextLevelThreshold = currentLevel * 150;
 
-      if (remainingXp >= nextLevelThreshold) {
+      while (remainingXp >= nextLevelThreshold) {
         remainingXp -= nextLevelThreshold;
-        nextLevel += 1;
+        currentLevel += 1;
+        nextLevelThreshold = currentLevel * 150;
       }
 
       return {
         ...prevUser,
         coins: prevUser.coins + coinsBonus,
         xp: remainingXp,
-        level: nextLevel
+        level: currentLevel
       };
     });
   };
@@ -472,26 +472,29 @@ export default function App() {
           >
             {activeTab === 'PRACTICE' && (
               <PracticeArena 
-              userToken={token} 
-              onAttemptSaved={(att) => setAttempts([att, ...attempts])}
-              onCoinsAwarded={handleCoinsAwarded}
-            />
-          )}
+                userToken={token} 
+                recentAttempts={attempts}
+                onAttemptSaved={(att) => setAttempts([att, ...attempts])}
+                onCoinsAwarded={handleCoinsAwarded}
+              />
+            )}
 
-          {activeTab === 'TRAINING' && (
-            <CourseTraining 
-              userToken={token} 
-              onCoinsAwarded={handleCoinsAwarded}
-            />
-          )}
+            {activeTab === 'TRAINING' && (
+              <CourseTraining 
+                userToken={token} 
+                onCoinsAwarded={handleCoinsAwarded}
+              />
+            )}
 
-          {activeTab === 'MULTIPLAYER' && (
-            <OnlineContestArena 
-              userToken={token} 
-              username={user.username}
-              onCoinsAwarded={handleCoinsAwarded}
-            />
-          )}
+            {activeTab === 'MULTIPLAYER' && (
+              <OnlineContestArena 
+                userToken={token} 
+                username={user.username}
+                currentUser={user}
+                recentAttempts={attempts}
+                onCoinsAwarded={handleCoinsAwarded}
+              />
+            )}
 
           {activeTab === 'COACH' && (
             <AICoachPanel 

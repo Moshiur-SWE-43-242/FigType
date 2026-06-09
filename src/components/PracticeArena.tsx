@@ -23,6 +23,7 @@ import { TypingAttempt } from '../types';
 
 interface Props {
   userToken: string;
+  recentAttempts: TypingAttempt[];
   onAttemptSaved: (attempt: TypingAttempt) => void;
   onCoinsAwarded: (coins: number, xp: number) => void;
 }
@@ -255,6 +256,7 @@ export default function PracticeArena({ userToken, onAttemptSaved, onCoinsAwarde
 
   useEffect(() => {
     fetchLeaderboard();
+    loadDailyPracticeSummary();
   }, []);
 
   // Word Typing Experience States
@@ -279,6 +281,16 @@ export default function PracticeArena({ userToken, onAttemptSaved, onCoinsAwarde
   const [accuracy, setAccuracy] = useState(100);
   const [done, setDone] = useState(false);
   const [errorMap, setErrorMap] = useState<Record<string, number>>({});
+  const [dailyPracticeSummary, setDailyPracticeSummary] = useState({ attempts: 0, averageWpm: 0, todayScore: 0 });
+  const [dailyAverageScores, setDailyAverageScores] = useState<{ date: string; averageWpm: number; attempts: number }[]>([]);
+
+  const getProgressBarClass = (percent: number) => {
+    const normalized = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
+    return `prog-width-${normalized}`;
+  };
+
+  const dailyWpmProgressClass = getProgressBarClass(Math.min(100, dailyPracticeSummary.averageWpm));
+  const contestUnlockProgressClass = getProgressBarClass(Math.min(100, (dailyPracticeSummary.attempts / 15) * 100));
 
   // Keyboard stats tracking states
   const [keyStats, setKeyStats] = useState<Record<string, { hits: number; errors: number }>>({});
@@ -410,6 +422,51 @@ export default function PracticeArena({ userToken, onAttemptSaved, onCoinsAwarde
   const clearAllPracticeTimers = () => {
     if (timerInterval.current) clearInterval(timerInterval.current);
     if (trackingInterval.current) clearInterval(trackingInterval.current);
+  };
+
+  const getDateKey = (date: Date = new Date()) => date.toISOString().split('T')[0];
+  const practiceStorageKey = 'figtyp-practice-daily-summary';
+
+  const loadDailyPracticeSummary = () => {
+    try {
+      const stored = window.localStorage.getItem(practiceStorageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as { [date: string]: { attempts: number; totalWpm: number } };
+      const todayKey = getDateKey();
+      const todayRecord = parsed[todayKey] || { attempts: 0, totalWpm: 0 };
+      const averageWpm = todayRecord.attempts > 0 ? Math.round(todayRecord.totalWpm / todayRecord.attempts) : 0;
+      setDailyPracticeSummary({ attempts: todayRecord.attempts, averageWpm, todayScore: averageWpm });
+      const recentDates = Object.keys(parsed)
+        .sort((a, b) => (a < b ? 1 : -1))
+        .slice(0, 7)
+        .map((dateKey) => ({
+          date: dateKey,
+          averageWpm: parsed[dateKey].attempts > 0 ? Math.round(parsed[dateKey].totalWpm / parsed[dateKey].attempts) : 0,
+          attempts: parsed[dateKey].attempts
+        }));
+      setDailyAverageScores(recentDates);
+    } catch (err) {
+      console.warn('Unable to load practice daily summary:', err);
+    }
+  };
+
+  const persistPracticeDailySummary = (record: { wpm: number }) => {
+    try {
+      const stored = window.localStorage.getItem(practiceStorageKey);
+      const parsed = stored ? JSON.parse(stored) as { [date: string]: { attempts: number; totalWpm: number } } : {};
+      const todayKey = getDateKey();
+      const existing = parsed[todayKey] || { attempts: 0, totalWpm: 0 };
+      const updated = {
+        ...existing,
+        attempts: existing.attempts + 1,
+        totalWpm: existing.totalWpm + record.wpm
+      };
+      parsed[todayKey] = updated;
+      window.localStorage.setItem(practiceStorageKey, JSON.stringify(parsed));
+      loadDailyPracticeSummary();
+    } catch (err) {
+      console.warn('Unable to persist practice daily summary:', err);
+    }
   };
 
   const playSynthesizerClick = () => {
@@ -720,6 +777,7 @@ export default function PracticeArena({ userToken, onAttemptSaved, onCoinsAwarde
       if (response.ok && contentType && contentType.includes("application/json")) {
         const data = await response.json();
         onAttemptSaved(data.attempt);
+        persistPracticeDailySummary({ wpm: finalWpmVal });
         fetchLeaderboard(); // refresh practice leaderboard standings!
         // award XP & coins payouts for decent attempts
         if (finalWpmVal >= 30 && finalAcc >= 80) {
@@ -1035,6 +1093,58 @@ export default function PracticeArena({ userToken, onAttemptSaved, onCoinsAwarde
               </button>
             </div>
 
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs font-mono">
+              <div className="flex items-center justify-between mb-3">
+                <span className="uppercase tracking-widest text-slate-400">Today</span>
+                <span className="text-[#00F3FF] font-semibold">Practice</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="block text-slate-500">Attempts</span>
+                  <strong className="text-white text-lg">{dailyPracticeSummary.attempts}</strong>
+                </div>
+                <div>
+                  <span className="block text-slate-500">Avg WPM</span>
+                  <strong className="text-white text-lg">{dailyPracticeSummary.averageWpm}</strong>
+                </div>
+              </div>
+              <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                <div className={`h-full bg-[#00F3FF] transition-all duration-300 ${dailyWpmProgressClass}`} />
+              </div>
+              <p className="mt-3 text-[10px] text-slate-500">Daily average typing score stored locally for quick analytics and persistence.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs font-mono">
+              <div className="flex items-center justify-between mb-3">
+                <span className="uppercase tracking-widest text-slate-400">Last 7 days</span>
+                <span className="text-emerald-400">Trend</span>
+              </div>
+              <div className="space-y-2">
+                {dailyAverageScores.length === 0 ? (
+                  <p className="text-slate-500 text-[10px]">No recent daily practice summary is available yet.</p>
+                ) : dailyAverageScores.map((item) => (
+                  <div key={item.date} className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>{item.date}</span>
+                    <span>{item.averageWpm} WPM • {item.attempts} run{item.attempts === 1 ? '' : 's'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-xs font-mono">
+              <div className="flex items-center justify-between mb-3">
+                <span className="uppercase tracking-widest text-slate-400">Contest Unlock</span>
+                <span className="text-[#00FF95]">Progress</span>
+              </div>
+              <div className="space-y-2">
+                <span className="text-white font-semibold text-lg">{Math.min(100, Math.round((dailyPracticeSummary.attempts / 15) * 100))}%</span>
+                <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div className={`h-full bg-[#00FF95] transition-all duration-300 ${contestUnlockProgressClass}`} />
+                </div>
+                <p className="text-[10px] text-slate-500">Complete 15 practice sessions to unlock multiplayer contest access.</p>
+              </div>
+            </div>
           </div>
 
           <div className="w-full lg:w-auto shrink-0 flex items-end">

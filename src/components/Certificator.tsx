@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Award, CheckCircle2, ShieldCheck, Printer, RefreshCw, Loader2, QrCode } from 'lucide-react';
-import { Certificate } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Award, CheckCircle2, ShieldCheck, Printer, RefreshCw, Loader2, QrCode, Eye } from 'lucide-react';
+import { Certificate, TypingAttempt } from '../types';
 import { jsPDF } from 'jspdf';
+import QRCode from 'qrcode';
 
 interface Props {
   userToken: string;
@@ -14,6 +15,10 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
   const [certs, setCerts] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [attempts, setAttempts] = useState<TypingAttempt[]>([]);
+  const [overallAvgWpm, setOverallAvgWpm] = useState(0);
+  const [overallAvgAccuracy, setOverallAvgAccuracy] = useState(100);
+  const [activeDaysInLast7, setActiveDaysInLast7] = useState(0);
   
   // validation form
   const [inputText, setInputText] = useState('');
@@ -23,9 +28,13 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
   const [accuracyCalculated, setAccuracyCalculated] = useState(100);
   const [finished, setFinished] = useState(false);
   const [activeCert, setActiveCert] = useState<Certificate | null>(null);
+  const [previewCert, setPreviewCert] = useState<Certificate | null>(null);
+  const [qrCodeImage, setQrCodeImage] = useState<string>('');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     fetchMyCertificates();
+    fetchMyAttempts();
   }, []);
 
   const fetchMyCertificates = async () => {
@@ -40,6 +49,44 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
       }
     } catch (e) {
       console.warn("Could not load certificates:", e);
+    }
+  };
+
+  const fetchMyAttempts = async () => {
+    try {
+      const res = await fetch('/api/attempts', {
+        headers: { 'Authorization': `Bearer ${userToken}` }
+      });
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setAttempts(data);
+
+        const validAttempts = data.filter((attempt: TypingAttempt) => attempt.wpm > 0 && attempt.accuracy >= 0);
+        const totalRecords = validAttempts.length;
+        if (totalRecords > 0) {
+          const avgWpm = Math.round(validAttempts.reduce((sum: number, attempt: TypingAttempt) => sum + attempt.wpm, 0) / totalRecords);
+          const avgAccuracy = Number((validAttempts.reduce((sum: number, attempt: TypingAttempt) => sum + attempt.accuracy, 0) / totalRecords).toFixed(1));
+          setOverallAvgWpm(avgWpm);
+          setOverallAvgAccuracy(avgAccuracy);
+        } else {
+          setOverallAvgWpm(0);
+          setOverallAvgAccuracy(100);
+        }
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const daysSet = new Set<string>();
+        validAttempts.forEach((attempt: TypingAttempt) => {
+          const date = new Date(attempt.createdAt);
+          if (!Number.isNaN(date.getTime()) && date >= sevenDaysAgo) {
+            daysSet.add(date.toISOString().split('T')[0]);
+          }
+        });
+        setActiveDaysInLast7(daysSet.size);
+      }
+    } catch (e) {
+      console.warn('Could not load attempts for certificate analytics:', e);
     }
   };
 
@@ -83,6 +130,10 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
     }
     if (accuracyCalculated < 90) {
       setErrorMsg('Accuracy scoring must be at least 90.0% to bypass credentials validation.');
+      return;
+    }
+    if (activeDaysInLast7 < 7) {
+      setErrorMsg('You must be active for at least 7 days in the last week before official certification can be issued.');
       return;
     }
 
@@ -132,6 +183,40 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
     setFinished(false);
     setErrorMsg('');
   };
+
+  const generateCertificateQRCode = async (cert: Certificate): Promise<string> => {
+    try {
+      const verificationUrl = `${cert.verificationUrl}/verify?id=${cert.id}&user=${cert.username}`;
+      const qrDataUrl = await QRCode.toDataURL(verificationUrl, {
+        width: 400,
+        margin: 2,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff'
+        },
+        errorCorrectionLevel: 'H'
+      });
+      return qrDataUrl;
+    } catch (e) {
+      console.error("QR code generation failed:", e);
+      return '';
+    }
+  };
+
+  const openCertificatePreview = async (cert: Certificate) => {
+    const qrImage = await generateCertificateQRCode(cert);
+    setQrCodeImage(qrImage);
+    setPreviewCert(cert);
+  };
+
+  const getProgressBarClass = (percent: number) => {
+    const normalized = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
+    return `prog-width-${normalized}`;
+  };
+
+  const overallSpeedProgressClass = getProgressBarClass((overallAvgWpm / 20) * 100);
+  const overallAccuracyProgressClass = getProgressBarClass((overallAvgAccuracy / 90) * 100);
+  const activeDaysProgressClass = getProgressBarClass((activeDaysInLast7 / 7) * 100);
 
   const downloadCertificatePdf = async (cert: Certificate) => {
     let logoUrl = '';
@@ -249,66 +334,26 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
       doc.setTextColor(147, 51, 234);
       doc.text("ONLINE SPEED ARENA", 35, 29.5);
 
-
       // --- Top Right Corner: QR Code to verify the certificate is correct ---
       const qrx = 247;
       const qry = 18;
       const qrSize = 25; // 25x25 mm
 
-      // White base backplate with thin borders for contrast
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'F');
-      doc.setDrawColor(226, 232, 240);
-      doc.setLineWidth(0.2);
-      doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'D');
+      // Generate and add authentic QR code
+      const qrImage = await generateCertificateQRCode(cert);
+      if (qrImage) {
+        // White base backplate with thin borders for contrast
+        doc.setFillColor(255, 255, 255);
+        doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'F');
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.2);
+        doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'D');
 
-      // Draw standard QR code Finder Patterns (3 corners)
-      doc.setFillColor(15, 23, 42); // deep dark blue finder
-      
-      // Top-Left Finder
-      doc.rect(qrx, qry, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + 1, qry + 1, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + 2, qry + 2, 2, 2, 'F');
-
-      // Top-Right Finder
-      doc.rect(qrx + qrSize - 6, qry, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + qrSize - 5, qry + 1, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + qrSize - 4, qry + 2, 2, 2, 'F');
-
-      // Bottom-Left Finder
-      doc.rect(qrx, qry + qrSize - 6, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + 1, qry + qrSize - 5, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + 2, qry + qrSize - 4, 2, 2, 'F');
-
-      // Verification String with all relevant details
-      const verificationText = `FIGTYPE PROFICIENCY CERTIFICATE | Name: ${cert.fullName || cert.username} | Mode: ${cert.mode} | Avg WPM: ${cert.wpm} | Accuracy: ${cert.accuracy}% | ID: ${cert.id} | System URL: ${cert.verificationUrl}`;
-
-      // Programmatic matrix of random but deterministic dots for an authentic look based on the verification text
-      let hash = 0;
-      for (let i = 0; i < verificationText.length; i++) {
-        hash = verificationText.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      hash = Math.abs(hash);
-
-      for (let r = 0; r < 15; r++) {
-        for (let c = 0; c < 15; c++) {
-          // Skip the 3 finder corners
-          if ((r < 5 && c < 5) || (r < 5 && c > 9) || (r > 9 && c < 5)) {
-            continue;
-          }
-          // Simple pseudo-random formula based on matrix rows and reference hash
-          const state = ((r * hash + c * 13 + 7) % 5 === 0) || ((r + c) % 3 === 0) || ((r * c + hash) % 4 === 0);
-          if (state) {
-            doc.setFillColor(15, 23, 42);
-            // Draw dot data cell
-            doc.rect(qrx + (c * (qrSize / 15)), qry + (r * (qrSize / 15)), qrSize / 15, qrSize / 15, 'F');
-          }
+        // Add the generated QR code image
+        try {
+          doc.addImage(qrImage, 'PNG', qrx, qry, qrSize, qrSize);
+        } catch (qrErr) {
+          console.warn("Failed to render QR code image:", qrErr);
         }
       }
 
@@ -317,7 +362,6 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
       doc.setFontSize(5.5);
       doc.setTextColor(100, 110, 120);
       doc.text("SCAN QR TO VERIFY", qrx + (qrSize / 2), qry + qrSize + 3.5, { align: "center" });
-
 
       // Title
       doc.setFont("Helvetica", "bold");
@@ -443,16 +487,46 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
           <p className="text-slate-400 text-xs md:text-sm leading-relaxed">
             Obtain a globally accessible, mathematically signed digital PDF verification validating your kinetic speed. Requires successful real-time duplication of our audited validation block.
           </p>
-          <div className="flex gap-4 pt-1 font-mono text-[10px] text-slate-500">
-            <span>🚀 Minimum Speed: <strong className="text-[#00FF95]">20 WPM</strong></span>
-            <span>🎯 Minimum Accuracy: <strong className="text-[#00FF95]">90.0%</strong></span>
+          <div className="flex flex-col gap-3 pt-1 font-mono text-[10px] text-slate-500">
+            <div className="flex flex-wrap gap-4">
+              <span>🚀 Minimum Speed: <strong className="text-[#00FF95]">20 WPM</strong></span>
+              <span>🎯 Minimum Accuracy: <strong className="text-[#00FF95]">90.0%</strong></span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3">
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/70">
+                <span className="text-[9px] uppercase tracking-wider font-mono text-slate-500">Full average performance</span>
+                <div className="mt-2 flex items-end justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-white">{overallAvgWpm} WPM</div>
+                    <div className="text-[10px] text-slate-500">Average speed across verified typing runs</div>
+                  </div>
+                  <div className="text-sm font-semibold text-[#00FF95]">{overallAvgAccuracy}%</div>
+                </div>
+                <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div className={`h-full bg-[#00FF95] transition-all duration-300 ${overallSpeedProgressClass}`} />
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/70">
+                <span className="text-[9px] uppercase tracking-wider font-mono text-slate-500">Activity streak (last 7 days)</span>
+                <div className="mt-2 flex items-end justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-white">{activeDaysInLast7} days</div>
+                    <div className="text-[10px] text-slate-500">Active days logged via training and practice</div>
+                  </div>
+                  <div className={`text-sm font-semibold ${activeDaysInLast7 >= 7 ? 'text-[#00FF95]' : 'text-[#FF4D6D]'}`}>{activeDaysInLast7 >= 7 ? 'Ready' : 'Pending'}</div>
+                </div>
+                <div className="mt-3 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div className={`h-full rounded-full transition-all duration-300 ${activeDaysInLast7 >= 7 ? 'bg-[#00FF95]' : 'bg-amber-500'} ${activeDaysProgressClass}`} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="p-4 bg-slate-950 border border-slate-850 rounded-xl space-y-1 text-center w-full md:w-auto">
           <Award className="w-8 h-8 text-[#00FF95] mx-auto animate-bounce" />
           <span className="text-xs font-semibold text-white block">Official Stamps and Seals Included</span>
-          <span className="text-[9px] text-slate-500 font-mono">Verified registries published on figtype/certs</span>
+          <span className="text-[9px] text-slate-500 font-mono">Verified registries published on figtyp/certs</span>
         </div>
       </div>
 
@@ -497,27 +571,61 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
 
           {/* Validation outputs */}
           {started && (
-            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/80 flex items-center justify-around text-center">
-              <div>
-                <span className="text-[9px] font-mono text-slate-500 uppercase block">Character Progress</span>
-                <span className="text-sm font-bold text-white font-mono">{inputText.length} / {CHALLENGE_TEXT.length}</span>
+            <div className="p-4 rounded-xl border border-slate-800 bg-slate-950/80 flex flex-col gap-4">
+              <div className="flex items-center justify-around text-center gap-4 sm:gap-6">
+                <div>
+                  <span className="text-[9px] font-mono text-slate-500 uppercase block">Character Progress</span>
+                  <span className="text-sm font-bold text-white font-mono">{inputText.length} / {CHALLENGE_TEXT.length}</span>
+                </div>
+                <div className="w-px h-8 bg-slate-800" />
+                <div>
+                  <span className="text-[9px] font-mono text-slate-500 uppercase block">Live Accuracy</span>
+                  <span className={`text-sm font-bold font-mono ${accuracyCalculated >= 90 ? 'text-[#00FF95]' : 'text-[#FF4D6D]'}`}>
+                    {accuracyCalculated}%
+                  </span>
+                </div>
+                {finished && (
+                  <>
+                    <div className="w-px h-8 bg-slate-800" />
+                    <div>
+                      <span className="text-[9px] font-mono text-slate-500 uppercase block">Speed Run Rate</span>
+                      <span className="text-sm font-bold text-[#00F3FF] font-mono">{wpmCalculated} WPM</span>
+                    </div>
+                  </>
+                )}
               </div>
-              <div className="w-px h-8 bg-slate-800" />
-              <div>
-                <span className="text-[9px] font-mono text-slate-500 uppercase block">Live Accuracy</span>
-                <span className={`text-sm font-bold font-mono ${accuracyCalculated >= 90 ? 'text-[#00FF95]' : 'text-[#FF4D6D]'}`}>
-                  {accuracyCalculated}%
-                </span>
-              </div>
-              {finished && (
-                <>
-                  <div className="w-px h-8 bg-slate-800" />
-                  <div>
-                    <span className="text-[9px] font-mono text-slate-500 uppercase block">Speed Run Rate</span>
-                    <span className="text-sm font-bold text-[#00F3FF] font-mono">{wpmCalculated} WPM</span>
+
+              <div className="rounded-2xl bg-slate-900/80 border border-slate-800 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Certification readiness</span>
+                  <span className={`text-[10px] font-bold ${overallAvgWpm >= 20 && overallAvgAccuracy >= 90 && activeDaysInLast7 >= 7 ? 'text-[#00FF95]' : 'text-[#FF4D6D]'}`}>
+                    {overallAvgWpm >= 20 && overallAvgAccuracy >= 90 && activeDaysInLast7 >= 7 ? 'Ready for official credential' : 'Needs more credential prep'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Average speed target</span>
+                    <span>{overallAvgWpm} / 20 WPM</span>
                   </div>
-                </>
-              )}
+                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                    <div className={`h-full bg-[#00FF95] transition-all duration-300 ${overallSpeedProgressClass}`} />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Average accuracy target</span>
+                    <span>{overallAvgAccuracy}% / 90%</span>
+                  </div>
+                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                    <div className={`h-full bg-[#00F3FF] transition-all duration-300 ${overallAccuracyProgressClass}`} />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Active days in last 7</span>
+                    <span>{activeDaysInLast7} / 7</span>
+                  </div>
+                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                    <div className={`h-full ${activeDaysInLast7 >= 7 ? 'bg-[#00FF95]' : 'bg-amber-500'} transition-all duration-300 ${activeDaysProgressClass}`} />
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -538,7 +646,7 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
                 </button>
                 <button
                   onClick={submitCertificateClaim}
-                  disabled={loading}
+                  disabled={loading || overallAvgWpm < 20 || overallAvgAccuracy < 90 || activeDaysInLast7 < 7}
                   className="py-2.5 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 text-white font-mono text-xs font-semibold rounded-xl cursor-pointer transition flex items-center justify-center gap-1.5"
                 >
                   {loading ? <Loader2 className="w-3.5 h-43.5 animate-spin" /> : null}
@@ -571,7 +679,7 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
                 <p className="text-slate-500 font-mono text-[10px] tracking-widest uppercase">This document affirms that</p>
                 <h3 className="text-xl font-display font-semibold tracking-wide text-white">{activeCert.fullName}</h3>
                 <p className="text-slate-400 text-xs px-4">
-                  has completed the audited speed challenges on the FigType Global Typing Arena with the following parameters:
+                  has completed the audited speed challenges on the FigTyp Global Typing Arena with the following parameters:
                 </p>
 
                 <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto pt-2 font-mono">
@@ -603,10 +711,16 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
 
               <div className="pt-2 flex gap-4">
                 <button
-                  onClick={() => downloadCertificatePdf(activeCert)}
-                  className="w-full py-2 bg-gradient-to-r from-teal-700 to-indigo-700 hover:from-teal-600 hover:to-indigo-600 text-white font-mono text-xs rounded-lg cursor-pointer transition flex items-center justify-center gap-1.5"
+                  onClick={() => openCertificatePreview(activeCert)}
+                  className="flex-1 py-2 bg-gradient-to-r from-blue-700 to-purple-700 hover:from-blue-600 hover:to-purple-600 text-white font-mono text-xs rounded-lg cursor-pointer transition flex items-center justify-center gap-1.5"
                 >
-                  <Printer className="w-3.5 h-3.5" /> Download PDF Certificate
+                  <Eye className="w-3.5 h-3.5" /> Preview
+                </button>
+                <button
+                  onClick={() => downloadCertificatePdf(activeCert)}
+                  className="flex-1 py-2 bg-gradient-to-r from-teal-700 to-indigo-700 hover:from-teal-600 hover:to-indigo-600 text-white font-mono text-xs rounded-lg cursor-pointer transition flex items-center justify-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Download
                 </button>
                 <button
                   onClick={() => setActiveCert(null)}
@@ -631,17 +745,25 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
                   {certs.map((cert) => (
                     <div 
                       key={cert.id} 
-                      onClick={() => setActiveCert(cert)}
-                      className="p-3 bg-slate-950 border border-slate-850 hover:border-emerald-500/40 rounded-xl flex items-center justify-between gap-4 cursor-pointer transition"
+                      className="p-3 bg-slate-950 border border-slate-850 hover:border-emerald-500/40 rounded-xl flex items-center justify-between gap-4 transition"
                     >
-                      <div className="space-y-0.5">
+                      <div 
+                        onClick={() => setActiveCert(cert)}
+                        className="flex-1 cursor-pointer space-y-0.5"
+                      >
                         <span className="text-white text-xs font-semibold block">{cert.mode}</span>
                         <span className="text-[9px] text-slate-500 block">Grade ID: {cert.id}</span>
                       </div>
-                      <div className="text-right text-xs">
+                      <div className="text-right text-xs space-y-1">
                         <span className="text-emerald-400 font-bold block">{cert.wpm} WPM</span>
                         <span className="text-slate-500 block text-[10px]">{cert.accuracy}% Acc</span>
                       </div>
+                      <button
+                        onClick={() => openCertificatePreview(cert)}
+                        className="px-3 py-1.5 bg-blue-950 border border-blue-800 hover:border-blue-600 text-blue-300 hover:text-blue-200 text-xs rounded transition flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" /> View
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -652,6 +774,102 @@ export default function Certificator({ userToken, onCertificateIssued }: Props) 
         </div>
 
       </div>
+
+      {/* Certificate Preview Modal */}
+      {previewCert && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Modal Header */}
+            <div className="sticky top-0 flex items-center justify-between p-6 border-b border-slate-800 bg-slate-900/80 backdrop-blur">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Eye className="w-5 h-5 text-[#00F3FF]" /> Certificate Preview
+              </h3>
+              <button
+                onClick={() => { setPreviewCert(null); setQrCodeImage(''); }}
+                className="text-slate-400 hover:text-slate-200 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Preview Content */}
+            <div className="p-8 space-y-6">
+              {/* Certificate Header */}
+              <div className="text-center space-y-2 pb-6 border-b border-slate-800">
+                <h2 className="text-2xl font-bold text-white">CERTIFICATE OF PROFICIENCY</h2>
+                <p className="text-slate-400 text-sm">MiraCore Logix Academy of Typing Kinetics</p>
+              </div>
+
+              {/* Certificate Details */}
+              <div className="space-y-4">
+                <div className="text-center">
+                  <p className="text-slate-500 text-xs mb-2">Awarded to</p>
+                  <p className="text-2xl font-bold text-[#00F3FF]">{previewCert.fullName || previewCert.username}</p>
+                </div>
+
+                <div className="text-center text-sm text-slate-400 mb-6">
+                  For demonstrated proficiency in <strong className="text-white">{previewCert.mode}</strong>
+                </div>
+
+                {/* Statistics Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Typing Speed</p>
+                    <p className="text-3xl font-bold text-emerald-400">{previewCert.wpm}</p>
+                    <p className="text-xs text-slate-500">Words Per Minute</p>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-center">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Accuracy</p>
+                    <p className="text-3xl font-bold text-blue-400">{previewCert.accuracy}%</p>
+                    <p className="text-xs text-slate-500">Precision</p>
+                  </div>
+                </div>
+
+                {/* QR Code Display */}
+                {qrCodeImage && (
+                  <div className="flex flex-col items-center justify-center py-6 bg-slate-950 border border-slate-800 rounded-lg">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Verification QR Code</p>
+                    <img src={qrCodeImage} alt="QR Code" className="w-32 h-32 border border-slate-700 rounded-lg" />
+                    <p className="text-[9px] text-slate-600 mt-3 text-center">Scan to verify certificate authenticity</p>
+                  </div>
+                )}
+
+                {/* Certificate Details */}
+                <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 space-y-2 text-xs text-slate-400 font-mono">
+                  <div className="flex justify-between">
+                    <span>Issue Date:</span>
+                    <span className="text-slate-200">{new Date(previewCert.issueDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Certificate ID:</span>
+                    <span className="text-slate-200">{previewCert.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Signed By:</span>
+                    <span className="text-slate-200">{previewCert.signature}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex gap-3 pt-6 border-t border-slate-800">
+                <button
+                  onClick={() => downloadCertificatePdf(previewCert)}
+                  className="flex-1 py-3 bg-gradient-to-r from-teal-700 to-indigo-700 hover:from-teal-600 hover:to-indigo-600 text-white font-mono text-sm rounded-lg cursor-pointer transition flex items-center justify-center gap-2"
+                >
+                  <Printer className="w-4 h-4" /> Download PDF
+                </button>
+                <button
+                  onClick={() => { setPreviewCert(null); setQrCodeImage(''); }}
+                  className="flex-1 py-3 bg-slate-950 border border-slate-800 text-slate-300 font-mono text-sm rounded-lg cursor-pointer hover:border-slate-700 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

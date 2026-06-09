@@ -40,6 +40,18 @@
   width: var(--progress-width);
 }
 
+.prog-width-0 { width: 0%; }
+.prog-width-10 { width: 10%; }
+.prog-width-20 { width: 20%; }
+.prog-width-30 { width: 30%; }
+.prog-width-40 { width: 40%; }
+.prog-width-50 { width: 50%; }
+.prog-width-60 { width: 60%; }
+.prog-width-70 { width: 70%; }
+.prog-width-80 { width: 80%; }
+.prog-width-90 { width: 90%; }
+.prog-width-100 { width: 100%; }
+
 .founder-avatar {
   width: var(--founder-avatar-size);
   height: var(--founder-avatar-size);
