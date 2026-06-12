@@ -13,11 +13,13 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [token, setToken] = useState(''); 
   
+  // Registration states
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
 
@@ -26,6 +28,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     setSuccessMsg('');
   };
 
+  // --- 1. Password Login ---
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -51,6 +54,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     }
   };
 
+  // --- 2. Request OTP ---
   const handleRequestOtp = async () => {
     if (!email) {
       setError('Please enter your email address first.');
@@ -79,6 +83,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     }
   };
 
+  // --- 3. Verify OTP ---
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -109,6 +114,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     }
   };
 
+  // --- 4. Register Profile ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -123,6 +129,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
       const data = await res.json();
 
       if (data.success) {
+        // Registration success, login automatically
         const loginRes = await fetch('/api/auth/password-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -142,6 +149,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     }
   };
 
+  // --- 5. Forgot Password Flow ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
@@ -224,6 +232,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
     }
   };
 
+  // --- 6. Guest Login ---
   const handleGuestLogin = () => {
     const mockGuest = {
       id: 'guest-' + Math.random().toString(36).substr(2, 9),
@@ -269,6 +278,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </div>
       )}
 
+      {/* ================= MODE: LOGIN ================= */}
       {mode === 'LOGIN' && (
         <form onSubmit={handlePasswordLogin} className="space-y-4">
           <div>
@@ -338,6 +348,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </form>
       )}
 
+      {/* ================= MODE: OTP VERIFY ================= */}
       {mode === 'OTP_VERIFY' && (
         <form onSubmit={handleVerifyOtp} className="space-y-4">
           <div className="text-center mb-2">
@@ -365,6 +376,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </form>
       )}
 
+      {/* ================= MODE: REGISTER NEW PROFILE ================= */}
       {mode === 'REGISTER' && (
         <form onSubmit={handleRegister} className="space-y-4">
           <div className="text-center mb-4 text-cyan-400 text-sm">
@@ -372,15 +384,40 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
           </div>
           <div>
             <label htmlFor="reg-name" className="block text-sm text-slate-400 mb-1">Full Name</label>
-            <input id="reg-name" type="text" required placeholder="e.g. John Doe" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            <input
+              id="reg-name"
+              type="text"
+              required
+              placeholder="e.g. John Doe"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
           </div>
           <div>
             <label htmlFor="reg-user" className="block text-sm text-slate-400 mb-1">Username</label>
-            <input id="reg-user" type="text" required placeholder="e.g. johndoe123" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none" value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))} />
+            <input
+              id="reg-user"
+              type="text"
+              required
+              placeholder="e.g. johndoe123"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ''))}
+            />
           </div>
           <div>
             <label htmlFor="reg-pass" className="block text-sm text-slate-400 mb-1">Set Password</label>
-            <input id="reg-pass" type="password" required minLength={8} placeholder="Minimum 8 characters" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              id="reg-pass"
+              type="password"
+              required
+              minLength={8}
+              placeholder="Minimum 8 characters"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
           <button type="submit" disabled={loading} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded-lg mt-4 disabled:opacity-50">
             {loading ? 'Saving...' : 'Complete Account Setup'}
@@ -388,6 +425,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </form>
       )}
 
+      {/* ================= MODE: FORGOT PASSWORD ================= */}
       {mode === 'FORGOT_PWD' && (
         <form onSubmit={handleForgotPassword} className="space-y-4">
           <div className="text-center mb-2">
@@ -395,7 +433,15 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
           </div>
           <div>
             <label htmlFor="reset-email" className="block text-sm text-slate-400 mb-1">Email Address</label>
-            <input id="reset-email" type="email" required placeholder="name@example.com" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input
+              id="reset-email"
+              type="email"
+              required
+              placeholder="name@example.com"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
           <button type="submit" disabled={loading} className="w-full bg-red-500 hover:bg-red-400 text-white font-bold py-3 rounded-lg disabled:opacity-50">
             {loading ? 'Sending...' : 'Send Reset OTP'}
@@ -406,6 +452,7 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </form>
       )}
 
+      {/* ================= MODE: RESET VERIFY ================= */}
       {mode === 'RESET_VERIFY' && (
         <form onSubmit={handleVerifyResetOtp} className="space-y-4">
            <div className="text-center mb-2">
@@ -413,7 +460,16 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
           </div>
           <div>
             <label htmlFor="reset-otp" className="block text-sm text-slate-400 mb-1">Enter Reset OTP</label>
-            <input id="reset-otp" type="text" required maxLength={6} placeholder="000000" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white text-center text-2xl tracking-[0.5em] focus:border-cyan-400 focus:outline-none" value={otp} onChange={(e) => setOtp(e.target.value)} />
+            <input
+              id="reset-otp"
+              type="text"
+              required
+              maxLength={6}
+              placeholder="000000"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white text-center text-2xl tracking-[0.5em] focus:border-cyan-400 focus:outline-none"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+            />
           </div>
           <button type="submit" disabled={loading} className="w-full bg-[#8B5CF6] hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition-colors disabled:opacity-50">
             {loading ? 'Verifying...' : 'Verify Code'}
@@ -421,11 +477,21 @@ export default function AuthGateway({ onAuthenticated, websiteLogo }: AuthGatewa
         </form>
       )}
 
+      {/* ================= MODE: SET NEW PASSWORD ================= */}
       {mode === 'SET_PWD' && (
         <form onSubmit={handleSetNewPassword} className="space-y-4">
           <div>
             <label htmlFor="new-pass" className="block text-sm text-slate-400 mb-1">Enter New Password</label>
-            <input id="new-pass" type="password" required minLength={8} placeholder="Minimum 8 characters" className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <input
+              id="new-pass"
+              type="password"
+              required
+              minLength={8}
+              placeholder="Minimum 8 characters"
+              className="w-full px-4 py-3 rounded-lg bg-[#0B0F19] border border-slate-700 text-white focus:border-cyan-400 focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
           <button type="submit" disabled={loading} className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-3 rounded-lg disabled:opacity-50">
             {loading ? 'Saving...' : 'Save New Password'}

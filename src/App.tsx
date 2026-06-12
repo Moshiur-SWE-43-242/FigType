@@ -86,15 +86,21 @@ export default function App() {
   };
 
   const fetchGlobalCMSNotices = async () => {
-    try {
-      const res = await fetch('/api/notices');
-      const contentType = res.headers.get("content-type");
-      if (res.ok && contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        setNotices(data);
+    // Read directly from LocalStorage so it works without backend and updates instantly!
+    const localNotices = localStorage.getItem('figtyp_notices');
+    if (localNotices) {
+      setNotices(JSON.parse(localNotices));
+    } else {
+      try {
+        const res = await fetch('/api/notices');
+        const contentType = res.headers.get("content-type");
+        if (res.ok && contentType && contentType.includes("application/json")) {
+          const data = await res.json();
+          setNotices(data);
+        }
+      } catch (e) {
+        console.warn("Could not fetch global CMS notices:", e);
       }
-    } catch (e) {
-      console.warn("Could not fetch global CMS notices:", e);
     }
   };
 
@@ -229,29 +235,8 @@ export default function App() {
   return (
     <div id="app-workspace" className="min-h-screen bg-[#06080F] text-slate-100 flex flex-col justify-between">
       
-      <header className="border-b border-slate-900 bg-slate-950/90 backdrop-blur sticky top-0 z-50 p-4">
-        {notices.length > 0 && (
-          <div id="notices-marquee" className="bg-[#FF4D6D]/10 border border-[#FF4D6D]/15 text-slate-100 py-2 px-3 rounded-xl mb-3">
-            <div className="w-full flex items-center justify-between gap-4 font-mono text-[10px] px-2 md:px-6">
-              <div className="flex items-center gap-2 shrink-0">
-                <Bell className="w-3.5 h-3.5 text-red-500 animate-bounce" />
-                <strong className="text-[#FF4D6D] uppercase text-[9px]">CMS FLASH NOTICE:</strong>
-              </div>
-              
-              <div className="flex-1 overflow-hidden relative h-4">
-                <div className="absolute whitespace-nowrap animate-marquee flex items-center gap-8">
-                  {notices.map((notice) => (
-                    <span key={notice.id} className="text-slate-300">
-                      &bull; <strong className="text-white">{notice.title}</strong>: {notice.content} 
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-         <div className="w-full flex items-center justify-between px-2 md:px-6">
+      <header className="border-b border-slate-900 bg-slate-950/90 backdrop-blur sticky top-0 z-50 p-4 pb-0">
+         <div className="w-full flex items-center justify-between px-2 md:px-6 pb-4">
           
           {/* Main Dashboard Logo - Resized */}
           <div 
@@ -381,8 +366,38 @@ export default function App() {
 
         </div>
 
+        {/* CMS Notice Marquee - Scrolling directly below the main menu bar */}
+        {notices.length > 0 && (
+          <div className="bg-[#FF4D6D]/10 border-t border-[#FF4D6D]/20 text-slate-100 py-1.5 px-3 overflow-hidden flex items-center -mx-4 md:-mx-6 px-4 md:px-6">
+            <div className="flex items-center gap-2 shrink-0 bg-[#FF4D6D]/20 px-2 py-0.5 rounded border border-[#FF4D6D]/30 z-10">
+              <Bell className="w-3 h-3 text-red-500 animate-bounce" />
+              <strong className="text-[#FF4D6D] uppercase text-[10px] font-mono tracking-widest">CMS FLASH:</strong>
+            </div>
+            <div className="ml-3 overflow-hidden flex-1">
+              <div className="animate-marquee whitespace-nowrap inline-flex items-center text-[11px] font-mono text-slate-300 gap-12">
+                {notices.map((notice) => (
+                  <span key={notice.id} className="inline-flex items-center gap-2">
+                    <span className="text-white font-bold">{notice.title}</span>
+                    <span>&bull;</span>
+                    <span>{notice.content}</span>
+                    <span className="text-slate-500 ml-2">[{new Date(notice.createdAt).toLocaleDateString()}]</span>
+                  </span>
+                ))}
+                {notices.map((notice) => (
+                  <span key={`${notice.id}-repeat`} className="inline-flex items-center gap-2">
+                    <span className="text-white font-bold">{notice.title}</span>
+                    <span>&bull;</span>
+                    <span>{notice.content}</span>
+                    <span className="text-slate-500 ml-2">[{new Date(notice.createdAt).toLocaleDateString()}]</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {isMobileMenuOpen && (
-          <div className="md:hidden mt-4 pt-4 border-t border-slate-900 space-y-3 font-mono text-xs">
+          <div className="md:hidden mt-4 pt-4 border-t border-slate-900 space-y-3 font-mono text-xs pb-4">
             <button
               onClick={() => { setActiveTab('PRACTICE'); setIsMobileMenuOpen(false); }}
               className={`w-full py-2.5 text-left px-2 rounded-lg flex items-center gap-2 ${activeTab === 'PRACTICE' ? 'bg-[#00F3FF]/10 text-[#00F3FF]' : 'text-slate-400'}`}

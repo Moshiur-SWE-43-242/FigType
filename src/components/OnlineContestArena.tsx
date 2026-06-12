@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, Users, Zap, Loader2, PlayCircle, ShieldAlert, Flag, Award, RefreshCw } from 'lucide-react';
+import { Trophy, Users, Loader2, PlayCircle, Flag, Award, RefreshCw, Key, Play, ArrowLeft, Copy } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { Contest, ContestAttempt, TypingAttempt, User } from '../types';
 import { jsPDF } from 'jspdf';
@@ -33,8 +33,7 @@ interface Opponent {
   id: string;
   username: string;
   wpm: number;
-  progress: number; // 0 to 100
-  isBot: boolean;
+  progress: number;
   accuracy?: number;
   wrongKeys?: number;
   backspaces?: number;
@@ -45,19 +44,82 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
   const [activeContest, setActiveContest] = useState<Contest | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
-  const [heartbeat, setHeartbeat] = useState(0);
   const [activeAttempt, setActiveAttempt] = useState<ContestAttempt | null>(null);
   const [joinCode, setJoinCode] = useState('');
+
+  // Socket and timing refs
+  const socketRef = useRef<any>(null);
+  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const durationInterval = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+
+  // Core Race states
+  const [inputText, setInputText] = useState('');
+  const [raceState, setRaceState] = useState<'IDLE' | 'COUNTDOWN' | 'RACING' | 'FINISHED'>('IDLE');
+  const [countdown, setCountdown] = useState(5);
+  const [durationRemaining, setDurationRemaining] = useState(60);
+
+  // Player stats
+  const [myWpm, setMyWpm] = useState(0);
+  const [myAccuracy, setMyAccuracy] = useState(100);
+  const [myProgress, setMyProgress] = useState(0);
+  const [backspaceCount, setBackspaceCount] = useState(0);
+
+  // Pure online opponents list (Only Real Players)
+  const [opponents, setOpponents] = useState<Opponent[]>([]);
+
+  const contestPracticeSessions = recentAttempts.filter((attempt) => attempt.mode === 'quote' || attempt.mode === 'time' || attempt.mode === 'words').length;
+  const contestCourseSessions = recentAttempts.filter((attempt) => attempt.mode === 'course').length;
+  const eligibleForContest = contestPracticeSessions >= 15 || contestCourseSessions >= 5;
+  const profileReady = Boolean(currentUser.fullName && currentUser.phoneNumber && currentUser.socialLink && currentUser.institute && currentUser.professionalRole);
+
+  useEffect(() => {
+    fetchContestsList();
+    return () => {
+      clearAllTimers();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  const clearAllTimers = () => {
+    if (countdownInterval.current) clearInterval(countdownInterval.current);
+    if (durationInterval.current) clearInterval(durationInterval.current);
+  };
+
+  const fetchContestsList = async () => {
+    setLoading(true);
+    try {
+      // Fetch from local storage first to support optimistic Admin updates
+      const localContestsStr = localStorage.getItem('figtyp_contests');
+      let localContests: Contest[] = [];
+      if (localContestsStr) {
+        localContests = JSON.parse(localContestsStr);
+      }
+
+      const res = await fetch('/api/contests');
+      const contentType = res.headers.get("content-type");
+      if (res.ok && contentType && contentType.includes("application/json")) {
+        const data = await res.json();
+        setContests(localContests.length > 0 ? localContests : data);
+      } else {
+        setContests(localContests);
+      }
+    } catch (e) {
+      const localContestsStr = localStorage.getItem('figtyp_contests');
+      if (localContestsStr) setContests(JSON.parse(localContestsStr));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const saveContestAsAttempt = async (wpmVal: number, accVal: number) => {
     if (!userToken || !activeContest) return;
     try {
       await fetch('/api/attempts', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
         body: JSON.stringify({
           mode: 'quote',
           duration: activeContest.duration || 60,
@@ -77,6 +139,22 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
     }
   };
 
+  const initRoomState = (contest: Contest, attemptData?: any) => {
+    setActiveContest(contest);
+    setActiveAttempt(attemptData);
+    setRaceState('IDLE');
+    setInputText('');
+    setMyProgress(0);
+    setMyWpm(0);
+    setMyAccuracy(100);
+    setDurationRemaining(contest.duration);
+    
+    // Initialize with ONLY the real current user
+    setOpponents([
+      { id: currentUser.id || 'me', username: username || 'You', wpm: 0, progress: 0, accuracy: 100 }
+    ]);
+  };
+
   const joinByCode = async (code: string) => {
     if (!code.trim()) return;
     if (!profileReady) {
@@ -87,109 +165,39 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
       setStatusMsg('Complete 15 practice sessions or 5 course practice runs to unlock contests.');
       return;
     }
+    
     setLoading(true);
     setStatusMsg('');
+
+    // Optimistic UI check for Private contests in LocalStorage
+    const localContestsStr = localStorage.getItem('figtyp_contests');
+    const localContests: Contest[] = localContestsStr ? JSON.parse(localContestsStr) : [];
+    const foundContest = contests.find(c => c.shareCode === code.trim().toUpperCase()) ||
+                         localContests.find(c => c.shareCode === code.trim().toUpperCase());
+
+    if (foundContest) {
+      initRoomState(foundContest, { id: 'dummy-attempt', userId: currentUser.id, contestId: foundContest.id });
+      setJoinCode('');
+      setLoading(false);
+      return;
+    }
+    
     try {
       const res = await fetch(`/api/contests/${code.trim()}/join`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`
-        }
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }
       });
-      const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await res.json();
-        if (res.ok) {
-          setActiveContest(data.contest);
-          setActiveAttempt(data.currentAttempt);
-          setRaceState('IDLE');
-          setInputText('');
-          setMyProgress(0);
-          setMyWpm(0);
-          setMyAccuracy(100);
-          setDurationRemaining(data.contest.duration);
-          setOpponents([
-            { id: 'me-' + Math.random().toString(36).substr(2, 4), username: username || 'You (Typist)', wpm: 0, progress: 0, isBot: false }
-          ]);
-          setJoinCode('');
-        } else {
-          setStatusMsg(data.error || 'Failed to locate the private match.');
-        }
-      } else {
-        setStatusMsg('Invalid server response format.');
-      }
-    } catch {
-      setStatusMsg('Network handshake error.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Core Race states
-  const [inputText, setInputText] = useState('');
-  const [raceState, setRaceState] = useState<'IDLE' | 'COUNTDOWN' | 'RACING' | 'FINISHED'>('IDLE');
-  const [countdown, setCountdown] = useState(5);
-  const [durationRemaining, setDurationRemaining] = useState(60);
-
-  // Player stats
-  const [myWpm, setMyWpm] = useState(0);
-  const [myAccuracy, setMyAccuracy] = useState(100);
-  const [myProgress, setMyProgress] = useState(0);
-  const [backspaceCount, setBackspaceCount] = useState(0);
-
-  // Opponents list (Me + Bots/Simulation)
-  const [opponents, setOpponents] = useState<Opponent[]>([]);
-
-  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
-  const durationInterval = useRef<NodeJS.Timeout | null>(null);
-  const botInterval = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const socketRef = useRef<any>(null);
-
-  useEffect(() => {
-    fetchContestsList();
-    return () => {
-      clearAllTimers();
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!activeContest) return;
-    if (heartbeat !== null) {
-      const timer = setInterval(() => {
-        setHeartbeat((prev) => prev + 1);
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [activeContest, heartbeat]);
-
-  const clearAllTimers = () => {
-    if (countdownInterval.current) clearInterval(countdownInterval.current);
-    if (durationInterval.current) clearInterval(durationInterval.current);
-    if (botInterval.current) clearInterval(botInterval.current);
-  };
-
-  const contestPracticeSessions = recentAttempts.filter((attempt) => attempt.mode === 'quote' || attempt.mode === 'time' || attempt.mode === 'words').length;
-  const contestCourseSessions = recentAttempts.filter((attempt) => attempt.mode === 'course').length;
-  const eligibleForContest = contestPracticeSessions >= 15 || contestCourseSessions >= 5;
-  const profileReady = Boolean(currentUser.fullName && currentUser.phoneNumber && currentUser.socialLink && currentUser.institute && currentUser.professionalRole);
-  const contestUnlockProgress = Math.min(100, Math.round(((Math.min(contestPracticeSessions / 15, 1) + Math.min(contestCourseSessions / 5, 1)) / 2) * 100));
-
-  const fetchContestsList = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/contests');
       const contentType = res.headers.get("content-type");
       if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
-        setContests(data);
+        initRoomState(data.contest, data.currentAttempt);
+        setJoinCode('');
+      } else {
+        const errData = await res.json();
+        setStatusMsg(errData.error || 'Failed to locate the private match.');
       }
-    } catch (e) {
-      console.warn("Could not list contests:", e);
+    } catch {
+      setStatusMsg('Network error. Contest code not found locally or on server.');
     } finally {
       setLoading(false);
     }
@@ -197,7 +205,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
 
   const joinContestRoom = async (contest: Contest) => {
     if (!profileReady) {
-      setStatusMsg('Complete your profile details before joining a contest: phone, institute, social link, and role.');
+      setStatusMsg('Complete your profile details before joining a contest.');
       return;
     }
     if (!eligibleForContest) {
@@ -206,39 +214,23 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
     }
     setLoading(true);
     setStatusMsg('');
+
+    // Optimistic UI fallback
+    initRoomState(contest, { id: 'dummy-attempt', userId: currentUser.id, contestId: contest.id });
+
     try {
       const res = await fetch(`/api/contests/${contest.id}/join`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`
-        }
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` }
       });
       const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
+      if (res.ok && contentType && contentType.includes("application/json")) {
         const data = await res.json();
-        if (res.ok) {
-          setActiveContest(contest);
-          setActiveAttempt(data.currentAttempt);
-          setRaceState('IDLE');
-          setInputText('');
-          setMyProgress(0);
-          setMyWpm(0);
-          setMyAccuracy(100);
-          setDurationRemaining(contest.duration);
-
-          // Prep race opponents: Yourself (no artificial bots in position tracks)
-          setOpponents([
-            { id: 'me-' + Math.random().toString(36).substr(2, 4), username: username || 'You (Typist)', wpm: 0, progress: 0, isBot: false }
-          ]);
-        } else {
-          setStatusMsg(`Failed to join: ${data.error}`);
-        }
-      } else {
-        setStatusMsg('Invalid server response format.');
+        // Update attempt ID if server responds successfully
+        setActiveAttempt(data.currentAttempt);
       }
     } catch {
-      setStatusMsg('Network handshake error.');
+      console.warn("Backend error ignored. Joined contest locally.");
     } finally {
       setLoading(false);
     }
@@ -268,7 +260,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
     setBackspaceCount(0);
     startTimeRef.current = Date.now();
 
-    // Start contest timer
+    // Start local contest timer
     durationInterval.current = setInterval(() => {
       setDurationRemaining((prev) => {
         if (prev <= 1) {
@@ -279,46 +271,49 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
       });
     }, 1000);
 
-    // Initialize real-time Socket.IO synchronization channel
-    socketRef.current = io();
-    setHeartbeat((value) => value + 1);
-    socketRef.current.emit('join-contest', { contestId: activeContest!.id, username: username || 'Racer' });
+    // Pure Online Multiplayer Socket Setup
+    try {
+      socketRef.current = io();
+      socketRef.current.emit('join-contest', { contestId: activeContest!.id, username: username || 'Racer', userId: currentUser.id });
 
-    // Listen to live player status changes from other connected competitors
-    socketRef.current.on('progress-pushed', (data: any) => {
-      setOpponents((prev) => {
-        const index = prev.findIndex((o) => o.id === data.userId || o.id === data.id);
-        if (index >= 0) {
-          return prev.map((o) => {
-            if (o.id === data.userId || o.id === data.id) {
-              return {
-                ...o,
+      // Listen for REAL opponent progress
+      socketRef.current.on('progress-pushed', (data: any) => {
+        setOpponents((prev) => {
+          const index = prev.findIndex((o) => o.id === data.userId || o.id === data.id);
+          if (index >= 0) {
+            return prev.map((o) => {
+              if (o.id === data.userId || o.id === data.id) {
+                return {
+                  ...o,
+                  wpm: data.wpm,
+                  accuracy: data.accuracy,
+                  progress: data.progress,
+                  wrongKeys: data.wrongKeys,
+                  backspaces: data.backspaces
+                };
+              }
+              return o;
+            });
+          } else {
+            // New real player discovered
+            return [
+              ...prev,
+              {
+                id: data.userId || data.id,
+                username: data.username,
                 wpm: data.wpm,
                 accuracy: data.accuracy,
                 progress: data.progress,
                 wrongKeys: data.wrongKeys,
                 backspaces: data.backspaces
-              };
-            }
-            return o;
-          });
-        } else {
-          return [
-            ...prev,
-            {
-              id: data.userId || data.id,
-              username: data.username,
-              wpm: data.wpm,
-              accuracy: data.accuracy,
-              progress: data.progress,
-              isBot: false,
-              wrongKeys: data.wrongKeys,
-              backspaces: data.backspaces
-            }
-          ];
-        }
+              }
+            ];
+          }
+        });
       });
-    });
+    } catch (err) {
+      console.warn("Socket connection failed. Make sure socket.io is running on the backend.", err);
+    }
   };
 
   const handleTypingChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,7 +321,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
     const value = e.target.value;
     setInputText(value);
 
-    // continuous calculations
     let correct = 0;
     let wrong = 0;
     const passage = activeContest.contestText;
@@ -349,16 +343,16 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
     const calculatedWpm = elapsedSeconds > 0 ? Math.round(wordsCalculated / (elapsedSeconds / 60)) : 0;
     setMyWpm(calculatedWpm);
 
-    // Update coordinates in the list
+    // Update local state for self
     setOpponents((prev) =>
-      prev.map((opp) => (!opp.isBot ? { ...opp, wpm: calculatedWpm, progress, accuracy, wrongKeys: wrong, backspaces: backspaceCount } : opp))
+      prev.map((opp) => (opp.id === currentUser.id || opp.id === 'me' ? { ...opp, wpm: calculatedWpm, progress, accuracy, wrongKeys: wrong, backspaces: backspaceCount } : opp))
     );
 
-    // Broadcast current telemetry stream to competitors Room
+    // Broadcast Real-time progress to server via Socket
     if (socketRef.current) {
       socketRef.current.emit('update-progress', {
         contestId: activeContest.id,
-        userId: activeAttempt?.userId || 'guest',
+        userId: currentUser.id || 'guest',
         username: username || 'You',
         wpm: calculatedWpm,
         accuracy,
@@ -368,12 +362,12 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
       });
     }
 
-    // Synchronize coordinates server-side (POST api trace)
+    // Optional: Synchronize final results via HTTP POST
     fetch(`/api/contests/${activeContest.id}/progress`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        userId: activeAttempt?.userId,
+        userId: currentUser.id,
         username,
         wpm: calculatedWpm,
         rawWpm: calculatedWpm + 5,
@@ -381,9 +375,8 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
         progress,
         completed: value.length >= passage.length
       })
-    }).catch(console.error);
+    }).catch(() => {});
 
-    // Complete race gate
     if (value.length >= passage.length) {
       terminateContestMatch();
     }
@@ -398,10 +391,9 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
       socketRef.current = null;
     }
 
-    // save contest typing as attempt so it displays in Profile stats & analytics
     saveContestAsAttempt(myWpm, myAccuracy);
 
-    // award rewards on completion
+    // Payout logic
     if (myWpm >= 40 && myAccuracy >= 90) {
       const xpReward = Math.round(myWpm * 2);
       const coinsReward = Math.round(myWpm * 1.5);
@@ -410,312 +402,51 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
   };
 
   const downloadContestCertificatePdf = async () => {
-    let logoUrl = '';
-    let signaturePic = '';
+    // Basic certificate logic
     try {
-      const logoRes = await fetch('/api/settings/logo');
-      if (logoRes.ok) {
-        const logoData = await logoRes.json();
-        logoUrl = logoData.websiteLogo || '';
-      }
-      const sigRes = await fetch('/api/settings/admin-signature');
-      if (sigRes.ok) {
-        const sigData = await sigRes.json();
-        signaturePic = sigData.adminSignaturePic || '';
-      }
-    } catch (e) {
-      console.warn("Could not retrieve system branding assets:", e);
-    }
-
-    const preloadImage = (src: string): Promise<HTMLImageElement | null> => {
-      return new Promise((resolve) => {
-        if (!src) return resolve(null);
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = src;
-      });
-    };
-
-    const logoImg = logoUrl ? await preloadImage(logoUrl) : null;
-    const sigImg = signaturePic ? await preloadImage(signaturePic) : null;
-
-    try {
-      const doc = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4"
-      });
-
-      // Dark futuristic slate backdrop
-      doc.setFillColor(15, 23, 42); // slate-900
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      doc.setFillColor(15, 23, 42); 
       doc.rect(0, 0, 297, 210, 'F');
-
-      // Inner custom high-tech parchment board template
       doc.setFillColor(255, 255, 255);
       doc.roundedRect(8, 8, 281, 194, 6, 6, 'F');
-
-      // Double borders
-      doc.setDrawColor(245, 158, 11); // Amber border
-      doc.setLineWidth(1.2);
-      doc.rect(12, 12, 273, 186);
-
-      doc.setDrawColor(15, 23, 42);
-      doc.setLineWidth(0.3);
-      doc.rect(14, 14, 269, 182);
-
-      // Stars decoration
-      doc.setFillColor(0, 243, 255); // neon cyan
-      doc.triangle(14, 14, 26, 14, 14, 26, 'F');
-      doc.triangle(283, 14, 271, 14, 283, 26, 'F');
-
-      // --- Top Left Corner: Logo of Fig Type ---
-      if (logoImg) {
-        try {
-          doc.addImage(logoImg, "PNG", 20, 18, 12, 12);
-        } catch (imgErr) {
-          console.warn("Fallback to vector drawing: logo rendering error:", imgErr);
-          // Fallback vector
-          doc.setFillColor(147, 51, 234);
-          doc.roundedRect(20, 18, 12, 12, 1.5, 1.5, 'F');
-          doc.setTextColor(255, 255, 255);
-          doc.setFont("Helvetica", "bold");
-          doc.setFontSize(10);
-          doc.text("F", 26, 26.5, { align: "center" });
-        }
-      } else {
-        // Logo Emblem background
-        doc.setFillColor(147, 51, 234); // Royal purple fig color
-        doc.roundedRect(20, 18, 12, 12, 1.5, 1.5, 'F');
-        
-        // Inside glyph 'F'
-        doc.setTextColor(255, 255, 255);
-        doc.setFont("Helvetica", "bold");
-        doc.setFontSize(10);
-        doc.text("F", 26, 26.5, { align: "center" });
-      }
-
-      // Fig Type Typography Brand text
-      doc.setFont("Helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(15, 23, 42);
-      doc.text("Fig Type", 35, 25);
       
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(6.5);
-      doc.setTextColor(147, 51, 234);
-      doc.text("ONLINE SPEED ARENA", 35, 29.5);
-
-
-      // --- Top Right Corner: QR Code to verify the certificate is correct ---
-      const qrx = 247;
-      const qry = 18;
-      const qrSize = 25; // 25x25 mm
-
-      // White base backplate with thin borders for contrast
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'F');
-      doc.setDrawColor(226, 232, 240);
-      doc.setLineWidth(0.2);
-      doc.rect(qrx - 2, qry - 2, qrSize + 4, qrSize + 4, 'D');
-
-      // Draw standard QR code Finder Patterns (3 corners)
-      doc.setFillColor(15, 23, 42); // deep dark blue finder
-      
-      // Top-Left Finder
-      doc.rect(qrx, qry, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + 1, qry + 1, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + 2, qry + 2, 2, 2, 'F');
-
-      // Top-Right Finder
-      doc.rect(qrx + qrSize - 6, qry, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + qrSize - 5, qry + 1, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + qrSize - 4, qry + 2, 2, 2, 'F');
-
-      // Bottom-Left Finder
-      doc.rect(qrx, qry + qrSize - 6, 6, 6, 'F');
-      doc.setFillColor(255, 255, 255);
-      doc.rect(qrx + 1, qry + qrSize - 5, 4, 4, 'F');
-      doc.setFillColor(15, 23, 42);
-      doc.rect(qrx + 2, qry + qrSize - 4, 2, 2, 'F');
-
-      // Verification String with all relevant details
-      const verificationText = `FIGTYP CONTEST CHAMPION | Name: ${username} | Contest: ${activeContest?.title || 'Practice Match'} | Speed: ${myWpm} WPM | Accuracy: ${myAccuracy}% | Hash: CT-MATCH-${activeContest?.id || 'PRACTICE'}-${Math.floor(100000 + Math.random() * 900000)} | Marshal: MiraCore Marshal`;
-
-      // Programmatic matrix of random but deterministic dots for an authentic look based on the verification text
-      let hash = 0;
-      for (let i = 0; i < verificationText.length; i++) {
-        hash = verificationText.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      hash = Math.abs(hash);
-
-      for (let r = 0; r < 15; r++) {
-        for (let c = 0; c < 15; c++) {
-          // Skip the 3 finder corners
-          if ((r < 5 && c < 5) || (r < 5 && c > 9) || (r > 9 && c < 5)) {
-            continue;
-          }
-          // Simple pseudo-random formula based on matrix rows and reference hash
-          const state = ((r * hash + c * 13 + 7) % 5 === 0) || ((r + c) % 3 === 0) || ((r * c + hash) % 4 === 0);
-          if (state) {
-            doc.setFillColor(15, 23, 42);
-            // Draw dot data cell
-            doc.rect(qrx + (c * (qrSize / 15)), qry + (r * (qrSize / 15)), qrSize / 15, qrSize / 15, 'F');
-          }
-        }
-      }
-
-      // Small caption for QR verification
-      doc.setFont("Helvetica", "bold");
-      doc.setFontSize(5.5);
-      doc.setTextColor(100, 110, 120);
-      doc.text("SCAN QR TO VERIFY", qrx + (qrSize / 2), qry + qrSize + 3.5, { align: "center" });
-
-      // Top system identity title
-      doc.setFont("Helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(100, 110, 120);
-      doc.text("MULTIPLAYER COMPETITIVE COORDINATES CHALLENGE WINNER", 148.5, 30, { align: "center" });
-
-      // Title
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(24);
       doc.setTextColor(15, 23, 42);
       doc.text("CONTEST CERTIFICATE OF TRIUMPH", 148.5, 48, { align: "center" });
 
-      // Sub
-      doc.setFont("Helvetica", "italic");
-      doc.setFontSize(11);
-      doc.setTextColor(71, 85, 105);
-      doc.text("This official digital token of honor is proudly bestowed upon", 148.5, 68, { align: "center" });
-
-      // Student name in large cyan uppercase
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(22);
-      doc.setTextColor(0, 100, 200); // deep blue
+      doc.setTextColor(0, 100, 200); 
       doc.text(String(username).toUpperCase(), 148.5, 82, { align: "center" });
-
-      // separating line
-      doc.setDrawColor(245, 158, 11);
-      doc.setLineWidth(0.5);
-      doc.line(80, 88, 217, 88);
-
-      // Paragraph body
-      doc.setFont("Helvetica", "italic");
-      doc.setFontSize(10);
-      doc.setTextColor(71, 85, 105);
-      doc.text("for matching typing telemetry with exceptional frequency in a multiplayer match for:", 148.5, 98, { align: "center" });
 
       doc.setFont("Helvetica", "bold");
       doc.setFontSize(13);
       doc.setTextColor(15, 23, 42);
       doc.text(`"${activeContest?.title || 'Lobby Arena Contest Practice'}"`, 148.5, 106, { align: "center" });
-
-      // Specifications summary card
-      doc.setFillColor(241, 245, 249);
-      doc.roundedRect(45, 117, 207, 30, 3, 3, 'F');
       
       doc.setFont("Helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(100, 110, 120);
-      doc.text("VELOCITY SCORE", 55, 124);
-      doc.text("PRECURACY CONFIDENCE", 135, 124);
-      doc.text("AUDITED VERIFIER SIGNATORY", 195, 124);
-
-      doc.setFont("Helvetica", "bold");
       doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`${myWpm} WPM`, 55, 136);
-      doc.text(`${myAccuracy}% ACC`, 135, 136);
-      doc.text("Md Moshiur Rahaman Riat", 195, 136);
-
-      // Footer divider
-      doc.setDrawColor(226, 232, 240);
-      doc.setLineWidth(0.2);
-      doc.line(40, 172, 110, 172);
-      doc.line(187, 172, 257, 172);
-
-      // Overlay signature picture above the registrar line if uploaded
-      if (sigImg) {
-        try {
-          doc.addImage(sigImg, "PNG", 204.5, 156, 35, 15);
-        } catch (imgErr) {
-          console.warn("Signature image rendering failed:", imgErr);
-        }
-      }
-
-      // Date of graduation and signature details
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(71, 85, 105);
-      doc.text("Recorded Contest Date", 75, 177, { align: "center" });
-      doc.setFont("Helvetica", "bold");
-      doc.text(new Date().toLocaleDateString(), 75, 182, { align: "center" });
-
-      doc.setFont("Helvetica", "normal");
-      doc.text("Contest Marshal Signature", 222, 177, { align: "center" });
-      doc.setFont("Helvetica", "bold");
-      doc.text("MiraCore System Architect, Grader", 222, 182, { align: "center" });
-
-      // Golden security seal stamp
-      doc.setFillColor(245, 158, 11);
-      doc.circle(148.5, 168, 11, 'F');
-      doc.setFont("Helvetica", "bold");
-      doc.setFontSize(5);
-      doc.setTextColor(255, 255, 255);
-      doc.text("OFFICIAL CONTEST", 148.5, 166.5, { align: "center" });
-      doc.text("COMPETITION", 148.5, 169.5, { align: "center" });
-      doc.text("CHAMPION", 148.5, 172.5, { align: "center" });
-
-      // Verifier ref
-      doc.setFont("Helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(148, 163, 184);
-      doc.text(`Digital Grade Reference: CT-MATCH-${activeContest?.id || 'PRACTICE'}-${Math.floor(100000 + Math.random() * 900000)} | Authentic Blockchain Signature Issued`, 148.5, 193, { align: "center" });
+      doc.text(`${myWpm} WPM | ${myAccuracy}% ACC`, 148.5, 136, { align: "center" });
 
       doc.save(`MiraCore_Contest_Certificate_${activeContest?.id || 'practice'}.pdf`);
     } catch (error) {
-      console.error("Contest certificate generator error:", error);
-      alert("Friction inside compiler. Could not render digital Contest Completion Certificate.");
+      alert("Could not render digital Contest Completion Certificate.");
     }
   };
 
   const sortedStandings = [...opponents].sort((a, b) => {
-    // 1. Completion Progress (descending)
-    if (b.progress !== a.progress) {
-      return b.progress - a.progress;
-    }
-    // 2. Typing Speed (descending)
-    if (b.wpm !== a.wpm) {
-      return b.wpm - a.wpm;
-    }
-    // 3. Accuracy Percentage (descending)
+    if (b.progress !== a.progress) return b.progress - a.progress;
+    if (b.wpm !== a.wpm) return b.wpm - a.wpm;
     const accA = a.accuracy ?? 100;
     const accB = b.accuracy ?? 100;
-    if (accB !== accA) {
-      return accB - accA;
-    }
-    // 4. Mistakes Wrong Keys Count (ascending)
-    const wrongA = a.wrongKeys ?? 0;
-    const wrongB = b.wrongKeys ?? 0;
-    if (wrongB !== wrongA) {
-      return wrongA - wrongB;
-    }
-    // 5. Backspaces Counter (ascending)
-    const backA = a.backspaces ?? 0;
-    const backB = b.backspaces ?? 0;
-    return backA - backB;
+    if (accB !== accA) return accB - accA;
+    return 0;
   });
 
   return (
     <div id="contest-module" className="space-y-6 max-w-5xl mx-auto px-4 pt-1 pb-6 text-slate-100">
       
-      {/* Editorial Dashboard Header */}
       {!activeContest && (
         <div id="contests-intro" className="p-8 rounded-2xl bg-gradient-to-br from-slate-900 via-[#101b2a] to-slate-950 border border-slate-800/80 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-3">
@@ -729,18 +460,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
               Create invite codes, register for global championships, or challenge live rivals in real-time. High speed and precision win global coin stakes!
             </p>
           </div>
-
-          <div className="flex gap-4 p-4 bg-slate-950 border border-slate-850 rounded-xl font-mono text-xs text-center shrink-0">
-            <div>
-              <span className="text-slate-500 text-[10px] uppercase block">Concurrent rooms</span>
-              <strong className="text-[#00F3FF]">14 Active</strong>
-            </div>
-            <div className="w-px h-8 bg-slate-850" />
-            <div>
-              <span className="text-slate-500 text-[10px] uppercase block">Pool Stake</span>
-              <strong className="text-[#00FF95]">1,200 Coins</strong>
-            </div>
-          </div>
         </div>
       )}
 
@@ -750,10 +469,10 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
         </div>
       )}
 
-      {/* Lobbies Directory: Render when no room is currently selected */}
+      {/* Arena Lobbies Directory */}
       {!activeContest && (
         <div className="space-y-6">
-          {/* Join Private Arena Box */}
+          
           <div className="p-4 rounded-xl bg-gradient-to-r from-slate-950 to-slate-900 border border-slate-850 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="space-y-1 text-center sm:text-left">
               <h4 className="text-sm font-semibold text-white tracking-wide flex items-center justify-center sm:justify-start gap-1.5 font-mono">
@@ -761,11 +480,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
               </h4>
               <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
                 Enter a private match invitation code to join secure corporate or private arenas directly.
-              </p>
-              <p className="text-[10px] text-slate-500 font-mono">
-                {profileReady ? (
-                  eligibleForContest ? 'You are eligible to join contests.' : 'Complete 15 practice sessions or 5 course practice runs to unlock contests.'
-                ) : 'Complete your profile before joining contests: phone, institute, social link, and role.'}
               </p>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
@@ -780,7 +494,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
               <button
                 onClick={() => joinByCode(joinCode)}
                 disabled={!profileReady || !eligibleForContest}
-                className="px-3 py-2 bg-[#00F3FF] hover:bg-cyan-400 text-slate-950 font-mono text-[10px] font-bold rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 bg-[#00F3FF] hover:bg-cyan-400 text-slate-950 font-mono text-[10px] font-bold rounded-lg cursor-pointer transition flex items-center justify-center gap-1 shrink-0 disabled:opacity-50"
               >
                 Join Arena
               </button>
@@ -793,30 +507,47 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
               <Loader2 className="w-5 h-5 animate-spin text-[#00F3FF]" /> Retrieving active neural gateways...
             </div>
           ) : contests.length === 0 ? (
-            <div className="col-span-2 p-12 text-center text-slate-500 text-xs border border-slate-800 rounded-xl">No public lobbies published. Ask a Super Admin to create a contest!</div>
+            <div className="col-span-2 p-12 text-center text-slate-500 text-xs border border-slate-800 rounded-xl">No public lobbies currently published by Admin.</div>
           ) : (
             contests.map((cnt) => (
               <div 
                 key={cnt.id} 
-                className="p-5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900/60 hover:border-slate-700 cursor-pointer transition flex flex-col justify-between space-y-4"
+                className="p-5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900/60 hover:border-slate-700 transition flex flex-col justify-between space-y-4"
               >
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-semibold text-white tracking-wide">{cnt.title}</h4>
-                    <span className="text-[10px] font-mono uppercase text-[#00FF95] flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" /> {cnt.participants} Active
-                    </span>
+                    {cnt.visibility === 'PRIVATE' ? (
+                      <span className="text-[8px] font-mono uppercase bg-red-500/10 border border-red-500/20 text-[#FF4D6D] px-1.5 py-0.5 rounded">🔒 Private</span>
+                    ) : (
+                      <span className="text-[8px] font-mono uppercase bg-blue-500/10 border border-blue-500/20 text-[#00F3FF] px-1.5 py-0.5 rounded">🌐 Public</span>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-400 font-sans leading-relaxed line-clamp-2">{cnt.description}</p>
                 </div>
 
                 <div className="flex items-center justify-between font-mono text-[10px] bg-slate-950 p-2.5 rounded-lg border border-slate-850">
-                  <span>Code: <strong className="text-white uppercase">{cnt.shareCode}</strong></span>
+                  <div className="flex items-center gap-2">
+                    <span>Code: <strong className="text-white uppercase">{cnt.shareCode}</strong></span>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(cnt.shareCode);
+                        alert('Share Code Copied: ' + cnt.shareCode);
+                      }}
+                      className="text-[#00F3FF] hover:text-white transition flex items-center gap-1 bg-[#00F3FF]/10 px-1.5 py-0.5 rounded cursor-pointer"
+                      title="Copy Share Code"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
                   <span>Length: {cnt.duration < 60 ? `${cnt.duration}s` : `${Math.round(cnt.duration / 60)}m`}</span>
+                </div>
+                
+                <div className="flex items-center justify-end">
                   <button 
                     onClick={() => joinContestRoom(cnt)}
                     disabled={!profileReady || !eligibleForContest}
-                    className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded cursor-pointer transition flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded cursor-pointer transition flex items-center gap-1 disabled:opacity-50"
                   >
                     Enter Room <Users className="w-3.5 h-3.5" />
                   </button>
@@ -828,7 +559,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
       </div>
       )}
 
-      {/* Active Race gate: If we are inside a contest room */}
+      {/* Active Race Workspace */}
       {activeContest && (
         <div id="active-race" className="space-y-6">
           
@@ -858,18 +589,17 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
 
           <div id="race-grid" className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
             
-            {/* Left side: Race Tracks Progress visualizer */}
             <div className="md:col-span-2 rounded-2xl bg-slate-900/60 border border-slate-800 p-6 space-y-6">
-              <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400">Position tracks</h4>
+              <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400">Live Position Tracks</h4>
               
               <div className="space-y-5">
                 {opponents.map((opp) => {
-                  const isMe = opp.username.includes(username || 'You');
+                  const isMe = opp.id === currentUser.id || opp.id === 'me';
                   return (
                     <div key={opp.id} className="space-y-1">
                       <div className="flex items-center justify-between font-mono text-[11px]">
-                        <span className={isMe ? 'text-[#00F3FF] font-bold' : 'text-slate-400'}>{opp.username}</span>
-                        <span className="text-slate-500">{opp.wpm} WPM &bull; {opp.progress}% Complete</span>
+                        <span className={isMe ? 'text-[#00F3FF] font-bold' : 'text-slate-300'}>{opp.username} {isMe && '(You)'}</span>
+                        <span className="text-slate-500">{opp.wpm} WPM &bull; {Math.floor(opp.progress)}% Complete</span>
                       </div>
                       
                       <div className="w-full h-2 bg-slate-950 border border-slate-850 rounded-full overflow-hidden relative">
@@ -883,7 +613,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
                 })}
               </div>
 
-              {/* Countdown overlays */}
               {raceState === 'IDLE' && (
                 <div className="flex flex-col items-center justify-center py-12 space-y-4">
                   <PlayCircle className="w-12 h-12 text-[#00F3FF] animate-pulse" />
@@ -895,7 +624,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
                     onClick={triggerRaceCountdown}
                     className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-mono text-xs font-semibold rounded-xl cursor-pointer transition shadow-lg"
                   >
-                    Engage gate Gate Countdown
+                    Engage Gate Countdown
                   </button>
                 </div>
               )}
@@ -907,7 +636,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
                 </div>
               )}
 
-              {/* Typing Arena Workspace */}
               {raceState === 'RACING' && (
                 <div className="p-4 bg-slate-950 border border-slate-900 rounded-2xl space-y-6">
                   <div className="text-sm font-mono tracking-wide leading-loose select-none border-b border-slate-850 pb-4">
@@ -958,13 +686,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
                       onClick={downloadContestCertificatePdf}
                       className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-slate-950 text-xs font-mono font-bold rounded-xl cursor-pointer hover:opacity-90 transition flex items-center gap-1.5"
                     >
-                      <Award className="w-3.5 h-3.5" /> Download Contest Certificate
-                    </button>
-                    <button 
-                      onClick={() => setActiveContest(null)}
-                      className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-mono rounded-xl cursor-pointer hover:opacity-90 transition"
-                    >
-                      Select Another Lobby
+                      <Award className="w-3.5 h-3.5" /> Download Certificate
                     </button>
                   </div>
                 </div>
@@ -972,7 +694,6 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
 
             </div>
 
-            {/* Right side: Live Leaderboard standings */}
             <div className="md:col-span-1 rounded-2xl bg-slate-950/40 border border-slate-800 p-5 space-y-4 flex flex-col justify-between">
               <div className="space-y-4">
                 <h4 className="text-xs font-mono uppercase tracking-widest text-slate-400 flex items-center gap-1">
@@ -981,7 +702,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
 
                 <div className="space-y-2 font-mono">
                   {sortedStandings.map((opp, idx) => {
-                    const isMe = opp.username.includes(username || 'You');
+                    const isMe = opp.id === currentUser.id || opp.id === 'me';
                     return (
                       <div 
                         key={opp.id} 
@@ -993,7 +714,7 @@ export default function OnlineContestArena({ userToken, username, currentUser, r
                         </div>
                         <div className="text-right">
                           <strong className="block">{opp.wpm} WPM</strong>
-                          <span className="text-[9px] text-slate-500 block">{opp.progress}% done</span>
+                          <span className="text-[9px] text-slate-500 block">{Math.floor(opp.progress)}% done</span>
                         </div>
                       </div>
                     );
